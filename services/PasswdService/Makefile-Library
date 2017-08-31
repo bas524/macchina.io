@@ -1,0 +1,22 @@
+#
+# Makefile
+#
+# $Id$
+#
+# Makefile for macchina.io PasswdService Library
+#
+
+include $(POCO_BASE)/build/rules/global
+
+objects = \
+	PasswdService \
+	PasswdRemoteObject \
+	PasswdServerHelper \
+	PasswdSkeleton \
+	IPasswd
+	
+target         = IoTPasswdService
+target_version = 1
+target_libs    = PocoRemotingNG PocoOSP PocoNet PocoUtil PocoJSON PocoXML PocoFoundation pam pam_misc
+
+include $(POCO_BASE)/build/rules/lib

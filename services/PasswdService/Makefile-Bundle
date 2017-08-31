@@ -1,0 +1,27 @@
+#
+# Makefile
+#
+# $Id$
+#
+# Makefile for macchina.io PasswdService bundle
+#
+
+include $(POCO_BASE)/build/rules/global
+
+ifneq (,$(findstring debug,$(DEFAULT_TARGET)))
+	BUNDLE_TOOL = $(POCO_BASE)/OSP/BundleCreator/$(POCO_HOST_BINDIR)/bundled
+else
+	BUNDLE_TOOL = $(POCO_BASE)/OSP/BundleCreator/$(POCO_HOST_BINDIR)/bundle
+endif
+
+objects = \
+	PasswdServiceImpl \
+	BundleActivator
+
+target         = io.macchina.services.passwdservice
+target_version = 1
+target_libs    = IoTPasswdService PocoOSP PocoRemotingNG PocoData PocoUtil PocoXML PocoJSON PocoNet PocoFoundation pam pam_misc
+
+postbuild      = $(SET_LD_LIBRARY_PATH) $(BUNDLE_TOOL) -n$(OSNAME) -a$(OSARCH) -o../bundles PasswdService.bndlspec
+
+include $(POCO_BASE)/build/rules/dylib

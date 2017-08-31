@@ -1,0 +1,26 @@
+<bundlespec>
+	<manifest>
+    	<name>macchina.io Passwd Service</name>
+		<symbolicName>io.macchina.services.passwdservice</symbolicName>
+		<version>1.0.0</version>
+		<vendor>IVK</vendor>
+		<copyright>(c) 2016-2017, IVK CJSC</copyright>
+		<activator>
+			<class>IoT::PasswdService::BundleActivator</class>
+			<library>io.macchina.services.passwdservice</library>
+		</activator>
+		<lazyStart>false</lazyStart>
+		<runLevel>610</runLevel>
+	</manifest>
+	<code>
+		bin/*.dll,
+		bin/*.pdb,
+		bin/${osName}/${osArch}/*.so,
+		bin/${osName}/${osArch}/*.dylib,
+    	../../lib/${osName}/${osArch}/libIoTPasswdService*.1.dylib,
+    	../../lib/${osName}/${osArch}/libIoTPasswdService*.so.1
+	</code>
+	<files>
+		bundle/*
+	</files>
+</bundlespec>
