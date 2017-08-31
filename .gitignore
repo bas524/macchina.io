@@ -114,3 +114,7 @@ cmake-build/
 ###################
 *.bak
 /nbproject/
+/macchina.io.config
+/macchina.io.creator
+/macchina.io.files
+/macchina.io.includes
