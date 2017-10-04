@@ -83,7 +83,7 @@ clean all:
 	$(MAKE) -C devices $(MAKECMDGOALS) $(MAKEARGS)
 	$(MAKE) -C services $(MAKECMDGOALS) $(MAKEARGS)
 	$(MAKE) -C webui $(MAKECMDGOALS) $(MAKEARGS)
-	$(MAKE) -C samples $(MAKECMDGOALS) $(MAKEARGS)
+        #$(MAKE) -C samples $(MAKECMDGOALS) $(MAKEARGS)
 	
 clean_bundles:
 	rm platform/OSP/bundles/*.bndl

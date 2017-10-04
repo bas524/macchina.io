@@ -11,35 +11,33 @@
 // All rights reserved.
 //
 
-
-#include <pwd.h>
-#include <grp.h>
-#include <stdexcept>
-#include <unistd.h>
-#include <shadow.h>
-#include <security/pam_appl.h>
-#include <cstring>
 #include "PasswdServiceImpl.h"
+#include <grp.h>
+#include <pwd.h>
+#include <security/pam_appl.h>
+#include <security/pam_misc.h>
+#include <shadow.h>
+#include <unistd.h>
+#include <cstring>
+#include <stdexcept>
 #include "Poco/Data/Statement.h"
 #include "Poco/Data/Transaction.h"
-#include "Poco/Timespan.h"
 #include "Poco/Path.h"
+#include "Poco/Timespan.h"
 
 namespace IoT {
 namespace PasswdService {
 
-PasswdServiceImpl::PasswdServiceImpl(Poco::OSP::BundleContext::Ptr pContext) :
-_pw(NULL),
-_gr(NULL),
-_pContext(pContext),
-_logger(Poco::Logger::get("IoT.PasswdService")) {
-
+PasswdServiceImpl::PasswdServiceImpl(Poco::OSP::BundleContext::Ptr pContext)
+    : _pw(NULL),
+      _gr(NULL),
+      _pContext(pContext),
+      _logger(Poco::Logger::get("IoT.PasswdService")) {
   setpwent();
   _pw = getpwent();
 
   setgrent();
   _gr = getgrent();
-  
 }
 
 PasswdServiceImpl::~PasswdServiceImpl() {
@@ -54,7 +52,8 @@ Groups PasswdServiceImpl::groups() const {
   PasswdService::Groups groups;
   setgrent();
   do {
-    groups.push_back(Group(static_cast<PasswdService::GroupID> (_gr->gr_gid), std::string(_gr->gr_name)));
+    groups.push_back(Group(static_cast<PasswdService::GroupID>(_gr->gr_gid),
+                           std::string(_gr->gr_name)));
     _gr = getgrent();
   } while (_gr != NULL);
 
@@ -76,7 +75,8 @@ Users PasswdServiceImpl::users() const {
   size_t uid_min = UID_MIN();
   do {
     if (_pw->pw_uid > uid_min || _pw->pw_uid == 0) {
-      User user(_pw->pw_uid, _pw->pw_gid, _pw->pw_name, _pw->pw_gecos, _pw->pw_passwd, groups(_pw->pw_name, _pw->pw_gid));
+      User user(_pw->pw_uid, _pw->pw_gid, _pw->pw_name, _pw->pw_gecos,
+                _pw->pw_passwd, groups(_pw->pw_name, _pw->pw_gid));
       users.push_back(user);
     }
     _pw = getpwent();
@@ -91,7 +91,8 @@ User PasswdServiceImpl::currentUser() const {
   if (pw == NULL) {
     return PasswdService::User();
   }
-  return User(pw->pw_uid, pw->pw_gid, pw->pw_name, pw->pw_gecos, pw->pw_passwd, groups(pw->pw_name, pw->pw_gid));
+  return User(pw->pw_uid, pw->pw_gid, pw->pw_name, pw->pw_gecos, pw->pw_passwd,
+              groups(pw->pw_name, pw->pw_gid));
 }
 
 User PasswdServiceImpl::byNic(const UserNic &nic) const {
@@ -103,53 +104,74 @@ User PasswdServiceImpl::byNic(const UserNic &nic) const {
   }
   return User();
 }
-typedef int (*conv_t)(int num_msg, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr);
+typedef int (*conv_t)(int num_msg, const struct pam_message **msg,
+                      struct pam_response **resp, void *appdata_ptr);
 
 struct FunctionConversation {
+  explicit FunctionConversation(const std::string &password)
+      : f(reinterpret_cast<conv_t>(&FunctionConversation::conv)),
+        _password(password) {}
 
-  explicit FunctionConversation(const std::string &password) : f(reinterpret_cast<conv_t> (&FunctionConversation::conv)), _password(password) {
-    _reply.resp = const_cast<char *> (_password.c_str());
-    _reply.resp_retcode = 0;
-  }
-
-  int conv(int num_msg, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr) {
+  int conv(int num_msg, const struct pam_message **msg,
+           struct pam_response **resp, void *appdata_ptr) {
     if (resp) {
-      *resp = &_reply;
+      _reply =
+          (struct pam_response *)calloc(num_msg, sizeof(struct pam_response));
+      if (_reply == NULL) {
+        return PAM_CONV_ERR;
+      }
+
+      _reply->resp = strdup(const_cast<char *>(_password.c_str()));
+      _reply->resp_retcode = 0;
+
+      *resp = _reply;
     }
     return PAM_SUCCESS;
   }
   conv_t f = NULL;
-private:
+
+ private:
   std::string _password;
 
-  struct pam_response _reply;
+  struct pam_response *_reply;
 };
 
-bool PasswdServiceImpl::authenticate(const std::string &userName, const std::string &password) const {
+bool PasswdServiceImpl::authenticate(const std::string &userName,
+                                     const std::string &password) const {
   bool result = true;
 
   FunctionConversation functionConversation(password);
 
   const struct pam_conv local_conversation = {functionConversation.f, NULL};
-  pam_handle_t *local_auth_handle = NULL; // this gets set by pam_start
+  pam_handle_t *local_auth_handle = NULL;  // this gets set by pam_start
 
   // local_auth_handle gets set based on the service
-  int retval = pam_start("macchina", userName.c_str(), &local_conversation, &local_auth_handle);
-
+  int retval = pam_start("macchina", userName.c_str(), &local_conversation,
+                         &local_auth_handle);
   if (retval != PAM_SUCCESS) {
     return false;
   }
+  //  retval = pam_set_item(local_auth_handle, PAM_AUTHTOK, password.c_str());
+  //  if (retval != PAM_SUCCESS) {
+  //    return false;
+  //  }
 
   retval = pam_authenticate(local_auth_handle, 0);
   if (retval != PAM_SUCCESS) {
     result = false;
+  } else {
+    retval = pam_acct_mgmt(local_auth_handle, 0);
+    if (retval == PAM_SUCCESS) {
+      result = false;
+    }
   }
 
   retval = pam_end(local_auth_handle, retval);
   return result;
 }
 
-bool PasswdServiceImpl::authorize(const std::string &userName, const std::string &permission) const {
+bool PasswdServiceImpl::authorize(const std::string &userName,
+                                  const std::string &permission) const {
   User user = byNic(userName);
   return (UserUtil::isValid(user) && UserUtil::hasGroup(user, permission));
 }
@@ -186,11 +208,12 @@ Groups PasswdServiceImpl::groups(const std::string &nic, size_t gid) const {
   int ngroups = 1024;
   std::vector<gid_t> cgroups;
   struct group *gr = NULL;
-  cgroups.reserve(static_cast<size_t> (ngroups));
+  cgroups.reserve(static_cast<size_t>(ngroups));
 
   Groups groups;
 
-  if (getgrouplist(nic.c_str(), static_cast<gid_t> (gid), &cgroups[0], &ngroups) != -1) {
+  if (getgrouplist(nic.c_str(), static_cast<gid_t>(gid), &cgroups[0],
+                   &ngroups) != -1) {
     for (int j = 0; j < ngroups; j++) {
       gr = getgrgid(cgroups[j]);
       if (gr != NULL) {
@@ -202,5 +225,5 @@ Groups PasswdServiceImpl::groups(const std::string &nic, size_t gid) const {
   return groups;
 }
 
-}
-} // namespace IoT::DeviceStatus
+}  // namespace PasswdService
+}  // namespace IoT
