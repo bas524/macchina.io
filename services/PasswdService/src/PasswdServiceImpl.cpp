@@ -134,7 +134,7 @@ bool PasswdServiceImpl::authenticate(const std::string &userName, const std::str
   pam_handle_t *local_auth_handle = NULL; // this gets set by pam_start
 
   // local_auth_handle gets set based on the service
-  int retval = pam_start("sshd", userName.c_str(), &local_conversation, &local_auth_handle);
+  int retval = pam_start("macchina", userName.c_str(), &local_conversation, &local_auth_handle);
 
   if (retval != PAM_SUCCESS) {
     return false;
