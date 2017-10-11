@@ -18,7 +18,6 @@
 #ifndef IoT_PasswdService_INCLUDED
 #define IoT_PasswdService_INCLUDED
 
-#include "Poco/OSP/Auth/AuthService.h"
 #include "IoT/Passwd/Passwd.h"
 #include "Poco/BasicEvent.h"
 #include "Poco/DateTime.h"
@@ -30,7 +29,7 @@ namespace IoT
 namespace PasswdService
 {
 
-typedef size_t GroupID;
+typedef unsigned long GroupID;
 typedef std::string GroupName;
 
 //@ serialize
@@ -45,8 +44,8 @@ struct Group
 };
 typedef std::vector<Group> Groups;
 
-typedef size_t UserID;
-typedef size_t UserGID;
+typedef unsigned long UserID;
+typedef unsigned long UserGID;
 typedef std::string UserNic;
 typedef std::string UserName;
 typedef std::string UserPasswordHash;
@@ -54,7 +53,7 @@ typedef std::string UserPasswordHash;
 //@ serialize	
 struct User
 {
-	User(UserID _id_, UserGID _gid_, const UserNic &_nic_, const UserName &_name_, const UserPasswordHash &_passwordHash_, const Groups &_groups_)
+  User(UserID _id_, UserGID _gid_, const UserNic &_nic_, const UserName &_name_, const UserPasswordHash &_passwordHash_, const Groups &_groups_)
 	: id(_id_), gid(_gid_), nic(_nic_), name(_name_), passwordHash(_passwordHash_), groups(_groups_) { }
 	User() { }
 	//@ mandatory=false
@@ -73,30 +72,21 @@ struct User
 typedef std::vector<User> Users;
 
 //@ remote
-class Passwd : public Poco::OSP::Auth::AuthService
+class IoTPasswd_API Passwd
 {
 public:
 	typedef Poco::SharedPtr<Passwd> Ptr;
 	Passwd();
-	virtual Groups groups() const = 0;
-	virtual Groups userGroups(const User &user) const = 0;
-	virtual Users users() const = 0;
-	virtual User currentUser() const = 0;
-	virtual User byNic(const UserNic &nic) const = 0;
-	virtual bool authenticate(const std::string &userName, const std::string &password) const;
-	virtual bool authorize(const std::string &userName, const std::string &permission) const;
-	// Service
-  const std::type_info& type() const {
-    return typeid (Passwd);
-  }
-
-  bool isA(const std::type_info& otherType) const {
-    std::string name(typeid (Passwd).name());
-    return name == otherType.name() || Poco::OSP::Auth::AuthService::isA(otherType);
-  }
-	virtual ~Passwd();
+  virtual Groups groups() const = 0;
+  virtual Groups userGroups(const User &user) const = 0;
+  virtual Users users() const = 0;
+  virtual User currentUser() const = 0;
+  virtual User byNic(const UserNic &nic) const = 0;
+//	virtual bool authenticate(const std::string &userName, const std::string &password) const;
+//	virtual bool authorize(const std::string &userName, const std::string &permission) const;
+  virtual ~Passwd();
 protected:
-	virtual size_t UID_MIN() const = 0;
+  virtual unsigned long UID_MIN() const = 0;
 };
 
 }

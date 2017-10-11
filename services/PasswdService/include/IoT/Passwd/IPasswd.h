@@ -39,10 +39,6 @@ public:
 	virtual ~IPasswd();
 		/// Destroys the IPasswd.
 
-	virtual bool authenticate(const std::string& userName, const std::string& password) const = 0;
-
-	virtual bool authorize(const std::string& userName, const std::string& permission) const = 0;
-
 	virtual IoT::PasswdService::User byNic(const std::string& nic) const = 0;
 
 	virtual IoT::PasswdService::User currentUser() const = 0;

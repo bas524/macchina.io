@@ -18,8 +18,6 @@
 
 
 #include "IoT/Passwd/PasswdService.h"
-#include "IoT/Passwd/GroupDeserializer.h"
-#include "IoT/Passwd/GroupSerializer.h"
 #include "Poco/RemotingNG/TypeDeserializer.h"
 
 
@@ -47,7 +45,7 @@ public:
 		remoting__staticInitBegin(REMOTING__NAMES);
 		static const std::string REMOTING__NAMES[] = {"id","name"};
 		remoting__staticInitEnd(REMOTING__NAMES);
-		TypeDeserializer<size_t >::deserialize(REMOTING__NAMES[0], false, deser, value.id);
+		TypeDeserializer<unsigned long >::deserialize(REMOTING__NAMES[0], false, deser, value.id);
 		TypeDeserializer<std::string >::deserialize(REMOTING__NAMES[1], false, deser, value.name);
 	}
 

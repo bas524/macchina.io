@@ -39,10 +39,6 @@ public:
 	virtual ~PasswdRemoteObject();
 		/// Destroys the PasswdRemoteObject.
 
-	virtual bool authenticate(const std::string& userName, const std::string& password) const;
-
-	virtual bool authorize(const std::string& userName, const std::string& permission) const;
-
 	IoT::PasswdService::User byNic(const std::string& nic) const;
 
 	IoT::PasswdService::User currentUser() const;
@@ -58,18 +54,6 @@ public:
 private:
 	Poco::SharedPtr<IoT::PasswdService::Passwd> _pServiceObject;
 };
-
-
-inline bool PasswdRemoteObject::authenticate(const std::string& userName, const std::string& password) const
-{
-	return _pServiceObject->authenticate(userName, password);
-}
-
-
-inline bool PasswdRemoteObject::authorize(const std::string& userName, const std::string& permission) const
-{
-	return _pServiceObject->authorize(userName, permission);
-}
 
 
 inline IoT::PasswdService::User PasswdRemoteObject::byNic(const std::string& nic) const

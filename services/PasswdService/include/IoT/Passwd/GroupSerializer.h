@@ -18,8 +18,6 @@
 
 
 #include "IoT/Passwd/PasswdService.h"
-#include "IoT/Passwd/GroupDeserializer.h"
-#include "IoT/Passwd/GroupSerializer.h"
 #include "Poco/RemotingNG/TypeSerializer.h"
 
 
@@ -43,7 +41,7 @@ public:
 		remoting__staticInitBegin(REMOTING__NAMES);
 		static const std::string REMOTING__NAMES[] = {"id","name",""};
 		remoting__staticInitEnd(REMOTING__NAMES);
-		TypeSerializer<size_t >::serialize(REMOTING__NAMES[0], value.id, ser);
+		TypeSerializer<unsigned long >::serialize(REMOTING__NAMES[0], value.id, ser);
 		TypeSerializer<std::string >::serialize(REMOTING__NAMES[1], value.name, ser);
 	}
 
