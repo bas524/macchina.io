@@ -53,7 +53,7 @@ typedef std::string UserPasswordHash;
 //@ serialize	
 struct User
 {
-  User(UserID _id_, UserGID _gid_, const UserNic &_nic_, const UserName &_name_, const UserPasswordHash &_passwordHash_, const Groups &_groups_)
+	User(UserID _id_, UserGID _gid_, const UserNic &_nic_, const UserName &_name_, const UserPasswordHash &_passwordHash_, const Groups &_groups_)
 	: id(_id_), gid(_gid_), nic(_nic_), name(_name_), passwordHash(_passwordHash_), groups(_groups_) { }
 	User() { }
 	//@ mandatory=false
@@ -77,16 +77,16 @@ class IoTPasswd_API Passwd
 public:
 	typedef Poco::SharedPtr<Passwd> Ptr;
 	Passwd();
-  virtual Groups groups() const = 0;
-  virtual Groups userGroups(const User &user) const = 0;
-  virtual Users users() const = 0;
-  virtual User currentUser() const = 0;
-  virtual User byNic(const UserNic &nic) const = 0;
-//	virtual bool authenticate(const std::string &userName, const std::string &password) const;
-//	virtual bool authorize(const std::string &userName, const std::string &permission) const;
-  virtual ~Passwd();
+	virtual Groups groups() const = 0;
+	virtual Groups userGroups(const User &user) const = 0;
+	virtual Users users() const = 0;
+	virtual User currentUser() const = 0;
+	virtual User byNic(const UserNic &nic) const = 0;
+	virtual bool authenticate(const std::string &userName, const std::string &password) const = 0;
+	virtual bool authorize(const std::string &userName, const std::string &permission) const = 0;
+	virtual ~Passwd();
 protected:
-  virtual unsigned long UID_MIN() const = 0;
+	virtual unsigned long UID_MIN() const = 0;
 };
 
 }

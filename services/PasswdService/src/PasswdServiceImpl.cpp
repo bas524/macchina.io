@@ -29,10 +29,10 @@ namespace IoT {
 namespace PasswdService {
 
 PasswdServiceImpl::PasswdServiceImpl(Poco::OSP::BundleContext::Ptr pContext)
-    : _pw(NULL),
-      _gr(NULL),
-      _pContext(pContext),
-      _logger(Poco::Logger::get("IoT.PasswdService")) {
+: _pw(NULL),
+_gr(NULL),
+_pContext(pContext),
+_logger(Poco::Logger::get("IoT.PasswdService")) {
   setpwent();
   _pw = getpwent();
 
@@ -52,8 +52,8 @@ Groups PasswdServiceImpl::groups() const {
   PasswdService::Groups groups;
   setgrent();
   do {
-    groups.push_back(Group(static_cast<PasswdService::GroupID>(_gr->gr_gid),
-                           std::string(_gr->gr_name)));
+    groups.push_back(Group(static_cast<PasswdService::GroupID> (_gr->gr_gid),
+        std::string(_gr->gr_name)));
     _gr = getgrent();
   } while (_gr != NULL);
 
@@ -76,7 +76,7 @@ Users PasswdServiceImpl::users() const {
   do {
     if (_pw->pw_uid > uid_min || _pw->pw_uid == 0) {
       User user(_pw->pw_uid, _pw->pw_gid, _pw->pw_name, _pw->pw_gecos,
-                _pw->pw_passwd, groups(_pw->pw_name, _pw->pw_gid));
+          _pw->pw_passwd, groups(_pw->pw_name, _pw->pw_gid));
       users.push_back(user);
     }
     _pw = getpwent();
@@ -92,7 +92,7 @@ User PasswdServiceImpl::currentUser() const {
     return PasswdService::User();
   }
   return User(pw->pw_uid, pw->pw_gid, pw->pw_name, pw->pw_gecos, pw->pw_passwd,
-              groups(pw->pw_name, pw->pw_gid));
+      groups(pw->pw_name, pw->pw_gid));
 }
 
 User PasswdServiceImpl::byNic(const UserNic &nic) const {
@@ -104,72 +104,53 @@ User PasswdServiceImpl::byNic(const UserNic &nic) const {
   }
   return User();
 }
-//typedef int (*conv_t)(int num_msg, const struct pam_message **msg,
-//                      struct pam_response **resp, void *appdata_ptr);
 
-//struct FunctionConversation {
-//  explicit FunctionConversation(const std::string &password)
-//      : f(reinterpret_cast<conv_t>(&FunctionConversation::conv)),
-//        _password(password) {}
+static int process(int num_msg, const struct pam_message **msg, struct pam_response **resp, void *appdata_ptr) {
+  (void) msg;
+  if (resp) {
+    struct pam_response *reply = (struct pam_response *) calloc(static_cast<size_t> (num_msg), sizeof (struct pam_response));
+    if (reply == NULL) {
+      return PAM_CONV_ERR;
+    }
 
-//  int conv(int num_msg, const struct pam_message **msg,
-//           struct pam_response **resp, void *appdata_ptr) {
-//    if (resp) {
-//      _reply =
-//          (struct pam_response *)calloc(num_msg, sizeof(struct pam_response));
-//      if (_reply == NULL) {
-//        return PAM_CONV_ERR;
-//      }
+    reply->resp = strdup(reinterpret_cast<std::string *> (appdata_ptr)->c_str());
+    reply->resp_retcode = 0;
 
-//      _reply->resp = strdup(const_cast<char *>(_password.c_str()));
-//      _reply->resp_retcode = 0;
+    *resp = reply;
+  }
+  return PAM_SUCCESS;
+}
 
-//      *resp = _reply;
-//    }
-//    return PAM_SUCCESS;
-//  }
-//  conv_t f = NULL;
+bool PasswdServiceImpl::authenticate(const std::string &userName, const std::string &password) const {
+  bool result = true;
+  const struct pam_conv local_conversation = {process, (void *) &password};
+  pam_handle_t *local_auth_handle = NULL; // this gets set by pam_start
 
-// private:
-//  std::string _password;
+  int retval = pam_start("macchina", userName.c_str(), &local_conversation,
+      &local_auth_handle);
+  if (retval != PAM_SUCCESS) {
+    return false;
+  }
 
-//  struct pam_response *_reply;
-//};
+  retval = pam_authenticate(local_auth_handle, 0);
+  if (retval != PAM_SUCCESS) {
+    result = false;
+  } else {
+    retval = pam_acct_mgmt(local_auth_handle, 0);
+    if (retval != PAM_SUCCESS) {
+      result = false;
+    }
+  }
 
-//bool PasswdServiceImpl::authenticate(const std::string &userName,
-//                                     const std::string &password) const {
-//  bool result = true;
+  retval = pam_end(local_auth_handle, retval);
+  return result;
+}
 
-//  FunctionConversation functionConversation(password);
-
-//  const struct pam_conv local_conversation = {functionConversation.f, NULL};
-//  pam_handle_t *local_auth_handle = NULL;  // this gets set by pam_start
-
-//  int retval = pam_start("macchina", userName.c_str(), &local_conversation,
-//                         &local_auth_handle);
-//  if (retval != PAM_SUCCESS) {
-//    return false;
-//  }
-
-//  retval = pam_authenticate(local_auth_handle, 0);
-//  if (retval != PAM_SUCCESS) {
-//    result = false;
-//  } else {
-//    retval = pam_acct_mgmt(local_auth_handle, 0);
-//    if (retval != PAM_SUCCESS) {
-//      result = false;
-//    }
-//  }
-
-//  retval = pam_end(local_auth_handle, retval);
-//  return result;
-//}
-
-//bool PasswdServiceImpl::authorize(const std::string &userName,
-//                                  const std::string &permission) const {
-//  User user = byNic(userName);
-//  return (UserUtil::isValid(user) && UserUtil::hasGroup(user, permission));
-//}
+bool PasswdServiceImpl::authorize(const std::string &userName,
+    const std::string &permission) const {
+  User user = byNic(userName);
+  return (UserUtil::isValid(user) && UserUtil::hasGroup(user, permission));
+}
 
 unsigned long PasswdServiceImpl::UID_MIN() const {
   User user = currentUser();
@@ -203,11 +184,11 @@ Groups PasswdServiceImpl::groups(const std::string &nic, unsigned long gid) cons
   int ngroups = 1024;
   std::vector<gid_t> cgroups;
   struct group *gr = NULL;
-  cgroups.reserve(static_cast<unsigned long>(ngroups));
+  cgroups.reserve(static_cast<unsigned long> (ngroups));
 
   Groups groups;
 
-  if (getgrouplist(nic.c_str(), static_cast<gid_t>(gid), &cgroups[0], &ngroups) != -1) {
+  if (getgrouplist(nic.c_str(), static_cast<gid_t> (gid), &cgroups[0], &ngroups) != -1) {
     for (int j = 0; j < ngroups; j++) {
       gr = getgrgid(cgroups[j]);
       if (gr != NULL) {
@@ -218,5 +199,5 @@ Groups PasswdServiceImpl::groups(const std::string &nic, unsigned long gid) cons
 
   return groups;
 }
-}  // namespace PasswdService
-}  // namespace IoT
+} // namespace PasswdService
+} // namespace IoT

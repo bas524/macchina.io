@@ -37,44 +37,44 @@ namespace PasswdService
 class PasswdServiceImpl : public Passwd
 /// Default implementation of the Passwd.
 {
-  mutable struct passwd *_pw;
-  mutable struct group *_gr;
-  struct UserUtil
-  {
-    static bool isValid(const User &user)
-    {
-      return !user.nic.empty() && !user.groups.empty();
-    }
-    static bool hasGroup(const User &user, const GroupName &groupName)
-    {
-      for(Groups::const_iterator it = user.groups.begin(); it != user.groups.end(); ++it)
-      {
-        if(it->name == groupName)
-        {
-          return true;
-        }
-      }
-      return false;
-    }
-  };
+	mutable struct passwd *_pw;
+	mutable struct group *_gr;
+	struct UserUtil
+	{
+		static bool isValid(const User &user)
+		{
+			return !user.nic.empty() && !user.groups.empty();
+		}
+		static bool hasGroup(const User &user, const GroupName &groupName)
+		{
+			for(Groups::const_iterator it = user.groups.begin(); it != user.groups.end(); ++it)
+			{
+				if(it->name == groupName)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+	};
 public:
 	PasswdServiceImpl(Poco::OSP::BundleContext::Ptr pContext);
 	/// Creates the PasswdServiceImpl.
-  virtual ~PasswdServiceImpl();
+	virtual ~PasswdServiceImpl();
 	/// Destroys the PasswdService.
-  Groups groups() const;
-  Groups userGroups(const User &user) const;
-  Users users() const;
-  User currentUser() const;
-  User byNic(const UserNic &nic) const;
-//	bool authenticate(const std::string &userName, const std::string &password) const;
-//	bool authorize(const std::string &userName, const std::string &permission) const;
+	Groups groups() const;
+	Groups userGroups(const User &user) const;
+	Users users() const;
+	User currentUser() const;
+	User byNic(const UserNic &nic) const;
+	bool authenticate(const std::string &userName, const std::string &password) const;
+	bool authorize(const std::string &userName, const std::string &permission) const;
 protected:
-  unsigned long UID_MIN() const;
+	unsigned long UID_MIN() const;
 private:
-  void resetGroups() const;
-  void resetUsers() const;
-  Groups groups(const std::string &nic, unsigned long gid) const;
+	void resetGroups() const;
+	void resetUsers() const;
+	Groups groups(const std::string &nic, unsigned long gid) const;
 private:
 	Poco::OSP::BundleContext::Ptr _pContext;
 	Poco::Logger &_logger;
