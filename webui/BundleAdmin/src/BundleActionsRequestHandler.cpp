@@ -92,9 +92,9 @@ void BundleActionsRequestHandler::handleRequest(Poco::Net::HTTPServerRequest& re
 	if (!Utility::isAuthenticated(pSession, response)) return;
 
 	std::string username = pSession->getValue<std::string>("username");
-  Poco::OSP::Auth::AuthService::Ptr pAuthService = Poco::OSP::ServiceFinder::findByName<Poco::OSP::Auth::AuthService>(context(), "osp.auth");
+	Poco::OSP::Auth::AuthService::Ptr pAuthService = Poco::OSP::ServiceFinder::findByName<Poco::OSP::Auth::AuthService>(context(), "osp.auth");
 
-  if (!pAuthService->authorize(username, "bundleAdmin"))
+	if (!pAuthService->authorize(username, "bundleAdmin"))
 	{
 		response.setContentLength(0);
 		response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_FORBIDDEN);
