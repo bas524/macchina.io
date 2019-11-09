@@ -42,7 +42,7 @@ class RemotingNGTCP_API Listener: public Poco::RemotingNG::EventListener
 {
 public:
 	typedef Poco::AutoPtr<Listener> Ptr;
-	
+
 	Poco::BasicEvent<Connection::Ptr> connectionAccepted;
 		/// Fired when a new client connection has been accepted.
 
@@ -86,7 +86,7 @@ public:
 		/// up a TCPServer instance (using the given params)
 		/// for accepting incoming connections.
 		///
-		/// Note that the given server socket can be a 
+		/// Note that the given server socket can be a
 		/// Poco::Net::SecureServerSocket in order to set up
 		/// a secure connection.
 
@@ -95,19 +95,25 @@ public:
 
 	void setTimeout(Poco::Timespan timeout);
 		/// Sets the receive timeout for connections.
-		
+
 	Poco::Timespan getTimeout() const;
 		/// Returns the receive timeout for connections.
-		
+
+	void setHandshakeTimeout(Poco::Timespan timeout);
+		/// Sets the handshake timeout for connections.
+
+	Poco::Timespan getHandshakeTimeout() const;
+		/// Returns the handshake timeout for connections.
+
 	void setEventSubscriptionTimeout(Poco::Timespan timeout);
 		/// Sets the timeout for event subscriptions.
-		
+
 	Poco::Timespan getEventSubscriptionTimeout() const;
 		/// Returns the timeout for event subscriptions.
-		
+
 	ConnectionManager& connectionManager();
 		/// Returns the ConnectionManager used by the Listener.
-		
+
 	static Ptr defaultListener();
 		/// Returns the Listener instance used for event subscriptions.
 		///
@@ -125,6 +131,15 @@ public:
 		/// ConnectionManager instance in a subsequent call will result
 		/// in a Poco::IllegalStateException being thrown.
 
+	void makeDefaultListener();
+		/// Makes the Listener the default Listener, returned by defaultListener().
+		///
+		/// Can only be called if there is no default Listener already set, or,
+		/// in other words, if defaultListener() has not been called yet.
+		///
+		/// Throws a Poco::IllegalStateException if another default Listener has
+		/// already been set.
+
 	// Poco::RemotingNG::EventListener
 	std::string subscribeToEvents(Poco::RemotingNG::EventSubscriber::Ptr pEventSubscriber);
 	void unsubscribeFromEvents(Poco::RemotingNG::EventSubscriber::Ptr pEventSubscriber);
@@ -141,23 +156,27 @@ public:
 	// internal
 	Poco::RemotingNG::EventSubscriber::Ptr findEventSubscriber(const std::string& path) const;
 
+protected:
+	void registerEventFrameHandler(Connection::Ptr pConnection);
+
 private:
 	enum
 	{
 		DEFAULT_TIMEOUT = 30,
+		DEFAULT_HANDSHAKE_TIMEOUT = 8,
 		DEFAULT_EVENT_SUBSCR_TIMEOUT = 60
 	};
-	
+
 	class RemotingNGTCP_API EventSubscription: public TimerTask
 	{
 	public:
 		typedef Poco::AutoPtr<EventSubscription> Ptr;
-		
+
 		EventSubscription(Listener& listener, const std::string& uri, Poco::UInt32 id);
 		void run();
 		const std::string& uri() const;
 		const std::string& path() const;
-		
+
 	private:
 		Listener& _listener;
 		Poco::URI _uri;
@@ -168,9 +187,11 @@ private:
 	typedef std::map<Poco::RemotingNG::EventSubscriber::Ptr, EventSubscription::Ptr> EventSubscriptionsMap;
 
 	static Poco::UInt32 nextSubscriberId();
+	static std::string encodeEndPoint(const std::string& endPoint);
 
 	ConnectionManager& _connectionManager;
 	Poco::Timespan _timeout;
+	Poco::Timespan _handshakeTimeout;
 	Poco::Timespan _eventSubscriptionTimeout;
 	bool _secure;
 	Poco::SharedPtr<Poco::Net::TCPServer> _pTCPServer;
@@ -180,6 +201,9 @@ private:
 	static Poco::FastMutex _staticMutex;
 	static Poco::UInt32 _nextSubscriberId;
 	static Ptr _pDefaultListener;
+
+	friend class ServerConnection;
+	friend class EventSubscription;
 };
 
 

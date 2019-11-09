@@ -37,6 +37,9 @@ endif
 ifeq ($(findstring armv7,$(OSARCH)),armv7)
 GYPFLAGS += -Darm_version=7
 endif
+ifeq ($(OSARCH),aarch64)
+V8ARCH = arm64
+endif
 ifeq ($(OSARCH),mipsel)
 V8ARCH = mipsel
 endif
@@ -55,6 +58,9 @@ V8HOSTARCH = ia32
 endif
 ifeq ($(findstring arm,$(POCO_HOST_OSARCH)),arm)
 V8HOSTARCH = arm
+endif
+ifeq ($(POCO_HOST_OSARCH),aarch64)
+V8HOSTARCH = arm64
 endif
 
 GYPFLAGS += -Dv8_target_arch=$(V8ARCH) -Dtarget_arch=$(V8ARCH) -Dhost_arch=$(V8HOSTARCH)
@@ -76,6 +82,12 @@ LINK += -Xlinker --hash-size=31 -Xlinker --reduce-memory-overhead
 export LINK
 endif
 
+ifeq ($(strip $(STRIP)),)
+V8STRIPCMD = touch -c
+else
+V8STRIPCMD = $(STRIP)
+endif
+
 default: shared_release
 
 v8deps: out/Makefile include/v8.h
@@ -94,6 +106,9 @@ shared_release: v8deps
 	cp out/Release/$(v8targetlibdir)libv8$(SHAREDLIBLINKEXT) $(LIBPATH)
 	cp out/Release/$(v8targetlibdir)libv8_libbase$(SHAREDLIBLINKEXT) $(LIBPATH)
 	cp out/Release/$(v8targetlibdir)libv8_libplatform$(SHAREDLIBLINKEXT) $(LIBPATH)
+	$(V8STRIPCMD) $(LIBPATH)/libv8$(SHAREDLIBLINKEXT)
+	$(V8STRIPCMD) $(LIBPATH)/libv8_libbase$(SHAREDLIBLINKEXT)
+	$(V8STRIPCMD) $(LIBPATH)/libv8_libplatform$(SHAREDLIBLINKEXT)
 
 all_shared: shared_debug shared_release
 

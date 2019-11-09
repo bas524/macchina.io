@@ -33,7 +33,7 @@ SessionHolder::SessionHolder(const std::string& connector, const std::string& co
 	_connector(connector),
 	_connectionString(connectionString),
 	_pageSize(256),
-	_session(connector, connectionString)
+	_pSession(new Poco::Data::Session(connector, connectionString))
 {
 }
 
@@ -80,6 +80,7 @@ v8::Handle<v8::ObjectTemplate> SessionWrapper::objectTemplate(v8::Isolate* pIsol
 		objectTemplate->Set(v8::String::NewFromUtf8(pIsolate, "rollback"), v8::FunctionTemplate::New(pIsolate, rollback));
 		objectTemplate->Set(v8::String::NewFromUtf8(pIsolate, "close"), v8::FunctionTemplate::New(pIsolate, close));
 		objectTemplate->Set(v8::String::NewFromUtf8(pIsolate, "execute"), v8::FunctionTemplate::New(pIsolate, execute));
+		objectTemplate->Set(v8::String::NewFromUtf8(pIsolate, "executeNonQuery"), v8::FunctionTemplate::New(pIsolate, executeNonQuery));
 
 		pooledObjectTemplate.Reset(pIsolate, objectTemplate);
 	}
@@ -137,14 +138,14 @@ void SessionWrapper::getConnectionString(v8::Local<v8::String> name, const v8::P
 void SessionWrapper::getIsConnected(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(info);
-	info.GetReturnValue().Set(pSessionHolder->session().isConnected());
+	info.GetReturnValue().Set(pSessionHolder->session()->isConnected());
 }
 
 
 void SessionWrapper::getIsTransaction(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(info);
-	info.GetReturnValue().Set(pSessionHolder->session().isTransaction());
+	info.GetReturnValue().Set(pSessionHolder->session()->isTransaction());
 }
 
 
@@ -174,7 +175,7 @@ void SessionWrapper::begin(const v8::FunctionCallbackInfo<v8::Value>& args)
 	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(args);
 	try
 	{
-		pSessionHolder->session().begin();
+		pSessionHolder->session()->begin();
 	}
 	catch (Poco::Exception& exc)
 	{
@@ -188,7 +189,7 @@ void SessionWrapper::commit(const v8::FunctionCallbackInfo<v8::Value>& args)
 	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(args);
 	try
 	{
-		pSessionHolder->session().commit();
+		pSessionHolder->session()->commit();
 	}
 	catch (Poco::Exception& exc)
 	{
@@ -202,7 +203,7 @@ void SessionWrapper::rollback(const v8::FunctionCallbackInfo<v8::Value>& args)
 	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(args);
 	try
 	{
-		pSessionHolder->session().rollback();
+		pSessionHolder->session()->rollback();
 	}
 	catch (Poco::Exception& exc)
 	{
@@ -216,7 +217,7 @@ void SessionWrapper::close(const v8::FunctionCallbackInfo<v8::Value>& args)
 	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(args);
 	try
 	{
-		pSessionHolder->session().close();
+		pSessionHolder->session()->close();
 	}
 	catch (Poco::Exception& exc)
 	{
@@ -225,69 +226,77 @@ void SessionWrapper::close(const v8::FunctionCallbackInfo<v8::Value>& args)
 }
 
 
+static void bindStatementArgs(Poco::Data::Statement& statement, const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+	using Poco::JS::Core::Wrapper;
+
+	for (int i = 1; i < args.Length(); i++)
+	{
+		if (args[i]->IsString())
+		{
+			statement.bind(Wrapper::toString(args[i]));
+		}
+		else if (args[i]->IsBoolean())
+		{
+			statement.bind(args[i]->BooleanValue());
+		}
+		else if (args[i]->IsInt32())
+		{
+			statement.bind(args[i]->Int32Value());
+		}
+		else if (args[i]->IsUint32())
+		{
+			statement.bind(args[i]->Uint32Value());
+		}
+		else if (args[i]->IsNumber())
+		{
+			statement.bind(args[i]->NumberValue());
+		}
+		else if (args[i]->IsDate())
+		{
+			v8::Local<v8::Date> jsDate = v8::Local<v8::Date>::Cast(args[i]);
+			double millis = jsDate->ValueOf();
+			Poco::Timestamp ts(static_cast<Poco::Timestamp::TimeVal>(millis*1000));
+			Poco::DateTime dateTime(ts);
+			statement.bind(dateTime);
+		}
+		else if (args[i]->IsObject() && Poco::JS::Core::Wrapper::isWrapper<Poco::DateTime>(args.GetIsolate(), args[i]))
+		{
+			Poco::DateTime* pDateTime = Wrapper::unwrapNativeObject<Poco::DateTime>(args[i]);
+			if (pDateTime)
+			{
+				statement.bind(*pDateTime);
+			}
+			else throw Poco::InvalidArgumentException(Poco::format("Cannot convert argument %d to Poco::DateTime", i));
+		}
+		else if (args[i]->IsObject() && Poco::JS::Core::Wrapper::isWrapper<Poco::LocalDateTime>(args.GetIsolate(), args[i]))
+		{
+			Poco::LocalDateTime* pLocalDateTime = Wrapper::unwrapNativeObject<Poco::LocalDateTime>(args[i]);
+			if (pLocalDateTime)
+			{
+				statement.bind(pLocalDateTime->utc());
+			}
+			else throw Poco::InvalidArgumentException(Poco::format("Cannot convert argument %d to Poco::LocalDateTime", i));
+		}
+		else
+		{
+			throw Poco::InvalidArgumentException(Poco::format("Cannot convert argument %d to native type", i));
+		}
+	}
+}
+
+
 void SessionWrapper::execute(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
 	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(args);
-	Poco::Data::Session& session = pSessionHolder->session();
+	Poco::SharedPtr<Poco::Data::Session> pSession = pSessionHolder->session();
 	if (args.Length() > 0)
 	{
-		RecordSetHolder* pRecordSetHolder = new RecordSetHolder;
+		RecordSetHolder* pRecordSetHolder = new RecordSetHolder(pSession);
 		try
 		{
-			Poco::Data::Statement statement = (session << toString(args[0]));
-			for (int i = 1; i < args.Length(); i++)
-			{
-				if (args[i]->IsString())
-				{
-					statement.bind(toString(args[i]));
-				}
-				else if (args[i]->IsBoolean())
-				{
-					statement.bind(args[i]->BooleanValue());
-				}
-				else if (args[i]->IsInt32())
-				{
-					statement.bind(args[i]->Int32Value());
-				}
-				else if (args[i]->IsUint32())
-				{
-					statement.bind(args[i]->Uint32Value());
-				}
-				else if (args[i]->IsNumber())
-				{
-					statement.bind(args[i]->NumberValue());
-				}
-				else if (args[i]->IsDate())
-				{
-					v8::Local<v8::Date> jsDate = v8::Local<v8::Date>::Cast(args[i]);
-					double millis = jsDate->ValueOf();
-					Poco::Timestamp ts(static_cast<Poco::Timestamp::TimeVal>(millis*1000));
-					Poco::DateTime dateTime(ts);
-					statement.bind(dateTime);
-				}
-				else if (args[i]->IsObject() && Poco::JS::Core::Wrapper::isWrapper<Poco::DateTime>(args.GetIsolate(), args[i]))
-				{
-					Poco::DateTime* pDateTime = Wrapper::unwrapNativeObject<Poco::DateTime>(args[i]);
-					if (pDateTime)
-					{
-						statement.bind(*pDateTime);
-					}
-					else throw Poco::InvalidArgumentException(Poco::format("Cannot convert argument %d to Poco::DateTime", i));
-				}
-				else if (args[i]->IsObject() && Poco::JS::Core::Wrapper::isWrapper<Poco::LocalDateTime>(args.GetIsolate(), args[i]))
-				{
-					Poco::LocalDateTime* pLocalDateTime = Wrapper::unwrapNativeObject<Poco::LocalDateTime>(args[i]);
-					if (pLocalDateTime)
-					{
-						statement.bind(pLocalDateTime->utc());
-					}
-					else throw Poco::InvalidArgumentException(Poco::format("Cannot convert argument %d to Poco::LocalDateTime", i));
-				}
-				else
-				{
-					throw Poco::InvalidArgumentException(Poco::format("Cannot convert argument %d to native type", i));
-				}
-			}
+			Poco::Data::Statement statement = (*pSession << toString(args[0]));
+			bindStatementArgs(statement, args);
 			if (pSessionHolder->getPageSize() > 0)
 			{
 				statement , limit(pSessionHolder->getPageSize());
@@ -302,6 +311,27 @@ void SessionWrapper::execute(const v8::FunctionCallbackInfo<v8::Value>& args)
 		catch (Poco::Exception& exc)
 		{
 			delete pRecordSetHolder;
+			returnException(args, exc);
+		}
+	}
+}
+
+
+void SessionWrapper::executeNonQuery(const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+	SessionHolder* pSessionHolder = Wrapper::unwrapNative<SessionHolder>(args);
+	Poco::SharedPtr<Poco::Data::Session> pSession = pSessionHolder->session();
+	if (args.Length() > 0)
+	{
+		try
+		{
+			Poco::Data::Statement statement = (*pSession << toString(args[0]));
+			bindStatementArgs(statement, args);
+			std::size_t n = statement.execute();
+			args.GetReturnValue().Set(static_cast<Poco::UInt32>(n));
+		}
+		catch (Poco::Exception& exc)
+		{
 			returnException(args, exc);
 		}
 	}

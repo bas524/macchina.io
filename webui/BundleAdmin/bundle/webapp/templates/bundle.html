@@ -37,6 +37,15 @@
 		<th>Run Level</th><td>{{bundle.runlevel}}</td>
 	  </tr>
 	  <tr class="odd">
+		<th>Sealed</th><td>{{bundle.sealed}}</td>
+	  </tr>
+	  <tr class="even">
+		<th>Lazy Start</th><td>{{bundle.lazyStart}}</td>
+	  </tr>
+	  <tr class="odd">
+		<th>Prevent Uninstall</th><td>{{bundle.preventUninstall}}</td>
+	  </tr>
+	  <tr class="even">
 		<th>Path</th><td>{{bundle.path}}</td>
 	  </tr>
 	</tbody>
@@ -96,3 +105,26 @@
     </table>
   </div>
 </div>
+<div id="modalBackground" class="modalBackground"></div>
+<div id="confirmStop" class="popupWindow">
+  <h1>Stop {{bundle.symbolicName}}?</h1>
+  <div>
+    <p>The following bundles depend upon this bundle:</p>
+    <ul>
+      <li ng-repeat="dep in bundle.requiredBy">{{dep.symbolicName}}</li>
+    </ul>
+    <p>Click <b>Stop Only This</b> to stop only this bundle.
+    Bundles depending upon this bundle may no longer function properly.
+    Click <b>Stop All</b> to stop this bundle and all depending bundles.</p>
+  </div>
+  <div>
+    <div style="text-align: right">
+	  <a href="" ng-click="cancelStop()">Cancel</a>
+	  &nbsp;
+	  <button type="button" ng-click="confirmStop()">Stop Only This</button>
+	  &nbsp;
+	  <button type="button" ng-click="confirmStopAll()">Stop All</button>
+	</div>
+  </div>
+</div>
+

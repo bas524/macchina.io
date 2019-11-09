@@ -165,7 +165,7 @@ bool FileImpl::isLinkImpl() const
 {
 	poco_assert (!_path.empty());
 
-	DWORD attr = GetFileAttributes(_upath.c_str());
+	DWORD attr = GetFileAttributes(_path.c_str());
 	if (attr == INVALID_FILE_ATTRIBUTES)
 		handleLastErrorImpl(_path);
 	return (attr & FILE_ATTRIBUTE_DIRECTORY) == 0 && (attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
@@ -377,6 +377,39 @@ bool FileImpl::createDirectoryImpl()
 	if (CreateDirectoryA(_path.c_str(), 0) == 0)
 		handleLastErrorImpl(_path);
 	return true;
+}
+
+
+FileImpl::FileSizeImpl FileImpl::totalSpaceImpl() const
+{
+	poco_assert(!_path.empty());
+
+	ULARGE_INTEGER space;
+	if (!GetDiskFreeSpaceExA(_path.c_str(), NULL, &space, NULL))
+		handleLastErrorImpl(_path);
+	return space.QuadPart;
+}
+
+
+FileImpl::FileSizeImpl FileImpl::usableSpaceImpl() const
+{
+	poco_assert(!_path.empty());
+
+	ULARGE_INTEGER space;
+	if (!GetDiskFreeSpaceExA(upath.c_str(), &space, NULL, NULL))
+		handleLastErrorImpl(_path);
+	return space.QuadPart;
+}
+
+
+FileImpl::FileSizeImpl FileImpl::freeSpaceImpl() const
+{
+	poco_assert(!_path.empty());
+
+	ULARGE_INTEGER space;
+	if (!GetDiskFreeSpaceExA(_path.c_str(), NULL, NULL, &space))
+		handleLastErrorImpl(_path);
+	return space.QuadPart;
 }
 
 

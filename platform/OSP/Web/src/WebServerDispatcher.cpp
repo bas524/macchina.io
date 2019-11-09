@@ -37,6 +37,7 @@
 #include "Poco/DateTimeFormat.h"
 #include "Poco/DeflatingStream.h"
 #include "Poco/MemoryStream.h"
+#include "Poco/StringTokenizer.h"
 #include "Poco/Message.h"
 #include <memory>
 #include <limits>
@@ -60,15 +61,22 @@ namespace Web {
 
 
 const std::string WebServerDispatcher::SERVICE_NAME("osp.web.dispatcher");
+const std::string WebServerDispatcher::BEARER("Bearer");
+const std::string WebServerDispatcher::X_OSP_AUTHORIZED_USER("X-OSP-Authorized-User");
 
 
-WebServerDispatcher::WebServerDispatcher(BundleContext::Ptr pContext, MediaTypeMapper::Ptr pMediaTypeMapper, const std::string& authServiceName, bool compressResponses, const std::set<std::string>& compressedMediaTypes, bool cacheResources):
-	_pContext(pContext),
-	_pMediaTypeMapper(pMediaTypeMapper),
-	_authServiceName(authServiceName),
-	_compressResponses(compressResponses),
-	_compressedMediaTypes(compressedMediaTypes),
-	_cacheResources(cacheResources),
+WebServerDispatcher::WebServerDispatcher(const Config& config):
+	_pContext(config.pContext),
+	_pMediaTypeMapper(config.pMediaTypeMapper),
+	_authServiceName(config.authServiceName),
+	_tokenValidatorName(config.tokenValidatorName),
+	_compressResponses((config.options & CONF_OPT_COMPRESS_RESPONSES) != 0),
+	_cacheResources((config.options & CONF_OPT_CACHE_RESOURCES) != 0),
+	_addAuthHeader((config.options & CONF_OPT_ADD_AUTH_HEADER) != 0),
+	_addSignature((config.options & CONF_OPT_ADD_SIGNATURE) != 0),
+	_authMethods(config.authMethods),
+	_compressedMediaTypes(config.compressedMediaTypes),
+	_customResponseHeaders(config.customResponseHeaders),
 	_threadPool("WebServer"),
 	_accessLogger(Poco::Logger::get("osp.web.access"))
 {
@@ -123,7 +131,7 @@ void WebServerDispatcher::addVirtualPath(const VirtualPath& virtualPath)
 		vPath.path = normalizePath(vPath.path);
 		Poco::Path path(vPath.path);
 		PathMap::iterator itTmp;
-	
+
 		// we have to check if a parent entry exists, start with /
 		std::string entry("/");
 		PathMap::const_iterator it = _pathMap.find(entry);
@@ -165,7 +173,7 @@ void WebServerDispatcher::addVirtualPath(const VirtualPath& virtualPath)
 			}
 			++it;
 		}
-	
+
 		std::string msg("Virtual path '");
 		msg += vPath.path;
 		msg += "' mapped by bundle ";
@@ -214,7 +222,7 @@ void WebServerDispatcher::removeVirtualPath(const std::string& virtualPath)
 void WebServerDispatcher::listVirtualPaths(PathInfoMap& paths) const
 {
 	FastMutex::ScopedLock lock(_mutex);
-	
+
 	paths.clear();
 	for (PathMap::const_iterator it = _pathMap.begin(); it != _pathMap.end(); ++it)
 	{
@@ -242,7 +250,7 @@ void WebServerDispatcher::virtualPathMappings(PathMap& mappings) const
 void WebServerDispatcher::addFilter(const std::string& mediaType, WebFilterFactoryPtr pFilterFactory, const WebFilter::Args& args)
 {
 	Poco::FastMutex::ScopedLock lock(_filterFactoryMutex);
-	
+
 	FilterFactoryMap::iterator it = _filterFactoryMap.find(mediaType);
 	if (it == _filterFactoryMap.end())
 	{
@@ -266,6 +274,8 @@ void WebServerDispatcher::handleRequest(Poco::Net::HTTPServerRequest& request, P
 	std::string username;
 	try
 	{
+		addCustomResponseHeaders(response);
+
 		URI uri(request.getURI());
 		std::string path(uri.getPath());
 		if (cleanPath(path))
@@ -300,7 +310,7 @@ void WebServerDispatcher::handleRequest(Poco::Net::HTTPServerRequest& request, P
 						}
 						catch (Poco::Exception& exc)
 						{
-							throw Poco::UnhandledException("Request Handler", exc.displayText());
+							throw Poco::UnhandledException("Request Handler", exc);
 						}
 					}
 					else
@@ -359,11 +369,12 @@ void WebServerDispatcher::handleRequest(Poco::Net::HTTPServerRequest& request, P
 		{
 			_pContext->logger().log(exc);
 		}
-	}	
+	}
 	catch (Poco::Exception& exc)
 	{
 		try
 		{
+			std::string excName;
 			std::string msg("Error processing ");
 			msg += request.getMethod();
 			msg += " request for \"";
@@ -372,21 +383,31 @@ void WebServerDispatcher::handleRequest(Poco::Net::HTTPServerRequest& request, P
 			msg += request.clientAddress().toString();
 			msg += ": ";
 			msg += exc.displayText();
+			if (exc.nested())
+			{
+				excName = exc.nested()->name();
+				msg += ": ";
+				msg += exc.nested()->displayText();
+			}
+			else
+			{
+				excName = exc.name();
+			}
 			_pContext->logger().error(msg);
-			sendInternalError(request, exc.displayText());
+			sendInternalError(request, formatMessage("internal", excName));
 		}
 		catch (Poco::Exception& exc)
 		{
 			_pContext->logger().log(exc);
 		}
 	}
-	
+
 	// clear out any remaining data in request body
 	if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST || request.getMethod() == Poco::Net::HTTPRequest::HTTP_PUT)
 	{
 		if (Poco::icompare(request.get(Poco::Net::HTTPMessage::CONNECTION, ""), Poco::Net::HTTPRequest::UPGRADE) != 0)
-		{ 
-			request.stream().ignore(std::numeric_limits<std::streamsize>::max()); 
+		{
+			request.stream().ignore(std::numeric_limits<std::streamsize>::max());
 		}
 	}
 
@@ -404,25 +425,25 @@ void WebServerDispatcher::logRequest(const Poco::Net::HTTPServerRequest& request
 	reqText += request.getURI();
 	reqText += ' ';
 	reqText += request.getVersion();
-	
+
 	Poco::Message message(_accessLogger.name(), reqText, Poco::Message::PRIO_INFORMATION);
-	
+
 	if (username.empty())
 		message["username"] = "-";
 	else
 		message["username"] = username;
-		
+
 	message["status"] = Poco::NumberFormatter::format(static_cast<int>(response.getStatus()));
 	message["client"] = request.clientAddress().host().toString();
-	
+
 	if (response.getContentLength64() != Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH)
 		message["size"] = Poco::NumberFormatter::format(response.getContentLength64());
 	else
 		message["size"] = "-";
-		
+
 	message["referer"] = request.get("Referer", "");
 	message["useragent"] = request.get("User-Agent", "");
-	
+
 	_accessLogger.log(message);
 }
 
@@ -441,7 +462,7 @@ void WebServerDispatcher::sendResource(Poco::Net::HTTPServerRequest& request, co
 	if (pResourceStream.get())
 	{
 		response.setContentType(mediaType);
-		
+
 		Poco::SharedPtr<WebFilter> pFilter = findFilter(mediaType);
 		if (pFilter)
 		{
@@ -466,7 +487,7 @@ void WebServerDispatcher::sendResource(Poco::Net::HTTPServerRequest& request, co
 					return;
 				}
 			}
-	
+
 			response.setChunkedTransferEncoding(true);
 			bool compressResponse(_compressResponses && request.hasToken("Accept-Encoding", "gzip") && shouldCompressMediaType(mediaType));
 			if (compressResponse) response.set("Content-Encoding", "gzip");
@@ -538,7 +559,7 @@ void WebServerDispatcher::removeBundle(Bundle::ConstPtr pBundle)
 		}
 		else ++itm;
 	}
-	
+
 	PatternVec::iterator itv = _patternVec.begin();
 	while (itv != _patternVec.end())
 	{
@@ -566,7 +587,7 @@ void WebServerDispatcher::uncacheBundleResources(Bundle::ConstPtr pBundle)
 	std::string cachePath = "//";
 	cachePath += pBundle->symbolicName();
 	cachePath += "/";
-	
+
 	Poco::FastMutex::ScopedLock lock(_resourceCacheMutex);
 
 	ResourceCache::iterator it = _resourceCache.begin();
@@ -744,7 +765,7 @@ bool WebServerDispatcher::cleanPath(std::string& path)
 	}
 	while (path.size() > 0 && path[path.size() - 1] == '.')
 		path.resize(path.size() - 1);
-	
+
 	if (path.size() > 0)
 	{
 		Path p(path, Path::PATH_UNIX);
@@ -762,22 +783,36 @@ bool WebServerDispatcher::cleanPath(std::string& path)
 
 bool WebServerDispatcher::authorize(Poco::Net::HTTPServerRequest& request, const VirtualPath& vPath, std::string& username) const
 {
+	bool authorized = false;
+	int authMethods = vPath.security.authMethods;
+	if (authMethods == 0) authMethods = _authMethods;
+
 	if (vPath.security.permission.empty())
 	{
-		return true;
+		authorized = true;
 	}
 	else
 	{
-		if (!vPath.security.session.empty())
+		if (request.hasCredentials())
 		{
-			return authorizeSession(request, vPath, username);
+			std::string scheme;
+			std::string authInfo;
+			request.getCredentials(scheme, authInfo);
+			if (scheme == Poco::Net::HTTPBasicCredentials::SCHEME && (authMethods & AUTH_BASIC) != 0)
+				authorized = authorizeBasic(request, authInfo, vPath, username);
+			else if (scheme == BEARER && (authMethods & AUTH_BEARER) != 0)
+				authorized = authorizeBearer(request, authInfo, vPath, username);
 		}
-		else if (request.hasCredentials())
+		else if (!vPath.security.session.empty() && (authMethods & AUTH_SESSION) != 0)
 		{
-			return authorizeBasic(request, vPath, username);
+			authorized = authorizeSession(request, vPath, username);
+		}
+		if (authorized && _addAuthHeader)
+		{
+			request.set(X_OSP_AUTHORIZED_USER, username);
 		}
 	}
-	return false;
+	return authorized;
 }
 
 
@@ -793,55 +828,102 @@ bool WebServerDispatcher::authorizeSession(Poco::Net::HTTPServerRequest& request
 			if (!username.empty())
 			{
 				AuthService::Ptr pAuthService = authService();
-				if (pAuthService->authorize(username, vPath.security.permission))
+				if (pAuthService->userExists(username))
 				{
-					return true;
+					if (vPath.security.permission == "*" || pAuthService->authorize(username, vPath.security.permission))
+					{
+						if (vPath.security.csrfProtection && !vPath.security.csrfTokenHeader.empty())
+						{
+							return request.get(vPath.security.csrfTokenHeader, "") == pSession->csrfToken();
+						}
+						else
+						{
+							return true;
+						}
+					}
+					else
+					{
+						_pContext->logger().warning("User %s does not have the permission (%s) to access %s.", username, vPath.security.permission, request.getURI());
+					}
 				}
 				else
 				{
-					_pContext->logger().warning(Poco::format("User %s does not have the permission (%s) to access %s.", username, vPath.security.permission, request.getURI()));
+					_pContext->logger().warning("User %s (authenticated via session) does not exist.", username);
 				}
 			}
 			else
 			{
-				_pContext->logger().warning(Poco::format("Failed to authorize user for path %s because session is not authenticated.", request.getURI()));
+				_pContext->logger().warning("Failed to authorize user for path %s because session is not authenticated.", request.getURI());
 			}
 		}
 		else
 		{
-			_pContext->logger().warning(Poco::format("Failed to authorize user for path %s because no session is available.", request.getURI()));
+			_pContext->logger().warning("Failed to authorize user for path %s because no session is available.", request.getURI());
 		}
 	}
-	else 
+	else
 	{
-		_pContext->logger().warning(Poco::format("Failed to authorize user for path %s via session because no WebSessionManager is available.", request.getURI()));
+		_pContext->logger().warning("Failed to authorize user for path %s via session because no WebSessionManager is available.", request.getURI());
 	}
 	return false;
 }
 
 
-bool WebServerDispatcher::authorizeBasic(Poco::Net::HTTPServerRequest& request, const VirtualPath& vPath, std::string& username) const
+bool WebServerDispatcher::authorizeBasic(Poco::Net::HTTPServerRequest& request, const std::string& creds, const VirtualPath& vPath, std::string& username) const
 {
 	AuthService::Ptr pAuthService = authService();
 	if (pAuthService)
 	{
-		HTTPBasicCredentials cred(request);
+		HTTPBasicCredentials cred(creds);
 		username = cred.getUsername();
 		if (pAuthService->authenticate(username, cred.getPassword()))
 		{
-			if (pAuthService->authorize(username, vPath.security.permission))
+			if (vPath.security.permission == "*" || pAuthService->authorize(username, vPath.security.permission))
 			{
 				return true;
 			}
 			else
 			{
-				_pContext->logger().warning(Poco::format("User %s does not have the permission (%s) to access %s.", username, vPath.security.permission, request.getURI()));
+				_pContext->logger().warning("User %s does not have the permission (%s) to access %s.", username, vPath.security.permission, request.getURI());
 			}
 		}
 		else
 		{
-			_pContext->logger().warning(Poco::format("User %s failed authentication.", username));
-		}	
+			_pContext->logger().warning("User %s failed authentication.", username);
+		}
+	}
+	return false;
+}
+
+
+bool WebServerDispatcher::authorizeBearer(Poco::Net::HTTPServerRequest& request, const std::string& token, const VirtualPath& vPath, std::string& username) const
+{
+	AuthService::Ptr pAuthService = authService();
+	TokenValidator::Ptr pTokenValidator = tokenValidator();
+	if (pAuthService && pTokenValidator)
+	{
+		if (pTokenValidator->validateToken(token, username))
+		{
+			if (pAuthService->userExists(username))
+			{
+				if (vPath.security.permission == "*" || pAuthService->authorize(username, vPath.security.permission))
+				{
+					return true;
+				}
+				else
+				{
+					_pContext->logger().warning("User %s does not have the permission (%s) to access %s.", username, vPath.security.permission, request.getURI());
+				}
+			}
+			else
+			{
+				_pContext->logger().warning("User %s (authenticated via token) does not exist.", username);
+			}
+		}
+		else
+		{
+			_pContext->logger().warning("Bearer token %s failed validation.", token);
+		}
 	}
 	return false;
 }
@@ -883,7 +965,7 @@ void WebServerDispatcher::sendMethodNotAllowed(Poco::Net::HTTPServerRequest& req
 	sendResponse(request, HTTPResponse::HTTP_METHOD_NOT_ALLOWED, message);
 }
 
-	
+
 void WebServerDispatcher::sendInternalError(Poco::Net::HTTPServerRequest& request, const std::string& message)
 {
 	sendResponse(request, HTTPResponse::HTTP_INTERNAL_SERVER_ERROR, message);
@@ -894,25 +976,14 @@ void WebServerDispatcher::sendResponse(Poco::Net::HTTPServerRequest& request, Po
 {
 	if (!request.response().sent())
 	{
-		const std::string& softwareVersion = request.serverParams().getSoftwareVersion();
-		request.response().setContentType("text/html");
-		request.response().setStatusAndReason(status);
-		std::string html("<HTML><HEAD><TITLE>");
-		html += NumberFormatter::format(static_cast<int>(status));
-		html += " - ";
-		html += request.response().getReasonForStatus(status);
-		html += "</TITLE></HEAD><BODY><H1>";
-		html += NumberFormatter::format(static_cast<int>(status));
-		html += " - ";
-		html += request.response().getReasonForStatus(status);
-		html += "</H1><P>";
-		html += htmlize(message);
-		html += "</P><HR><ADDRESS>";
-		html += htmlize(softwareVersion);
-		html += " at ";
-		html += request.serverAddress().toString();
-		html += "</ADDRESS></BODY></HTML>";
-		request.response().sendBuffer(html.data(), html.size());
+		if (request.get("Accept", "").find("application/json") != std::string::npos)
+		{
+			sendJSONResponse(request, status, message);
+		}
+		else
+		{
+			sendHTMLResponse(request, status, message);
+		}
 	}
 	else
 	{
@@ -921,6 +992,51 @@ void WebServerDispatcher::sendResponse(Poco::Net::HTTPServerRequest& request, Po
 		msg += "\") because a response has already been sent for this request.";
 		_pContext->logger().warning(msg);
 	}
+}
+
+
+void WebServerDispatcher::sendHTMLResponse(Poco::Net::HTTPServerRequest& request, Poco::Net::HTTPResponse::HTTPStatus status, const std::string& message)
+{
+	const std::string& softwareVersion = request.serverParams().getSoftwareVersion();
+	request.response().setContentType("text/html");
+	request.response().setStatusAndReason(status);
+	std::string html("<HTML><HEAD><TITLE>");
+	html += NumberFormatter::format(static_cast<int>(status));
+	html += " - ";
+	html += request.response().getReasonForStatus(status);
+	html += "</TITLE></HEAD><BODY><H1>";
+	html += NumberFormatter::format(static_cast<int>(status));
+	html += " - ";
+	html += request.response().getReasonForStatus(status);
+	html += "</H1><P>";
+	html += htmlize(message);
+	html += "</P><HR>";
+	if (_addSignature)
+	{
+		html += "<ADDRESS>";
+		html += htmlize(softwareVersion);
+		html += " at ";
+		html += request.serverAddress().toString();
+		html += "</ADDRESS>";
+	}
+	html += "</BODY></HTML>";
+	request.response().sendBuffer(html.data(), html.size());
+}
+
+
+void WebServerDispatcher::sendJSONResponse(Poco::Net::HTTPServerRequest& request, Poco::Net::HTTPResponse::HTTPStatus status, const std::string& message)
+{
+	request.response().setContentType("application/json");
+	request.response().setStatusAndReason(status);
+
+	std::string json(
+		Poco::format("{ \"error\": \"%s\", \"detail\": \"%s\", \"code\": %d }",
+			request.response().getReasonForStatus(status),
+			jsonize(message),
+			static_cast<int>(status)
+		)
+	);
+	request.response().sendBuffer(json.data(), json.size());
 }
 
 
@@ -944,29 +1060,69 @@ std::string WebServerDispatcher::htmlize(const std::string& str)
 }
 
 
+std::string WebServerDispatcher::jsonize(const std::string& str)
+{
+	std::string::const_iterator it(str.begin());
+	std::string::const_iterator end(str.end());
+	std::string json;
+	for (; it != end; ++it)
+	{
+		switch (*it)
+		{
+		case '"': json += "\\\""; break;
+		case '\r': json += "\\r"; break;
+		case '\n': json += "\\n"; break;
+		case '\t': json += "\\t"; break;
+		default:  json += *it; break;
+		}
+	}
+	return json;
+}
+
+
 Poco::OSP::Auth::AuthService::Ptr WebServerDispatcher::authService() const
-{	
+{
 	Poco::FastMutex::ScopedLock lock(_authServiceMutex);
-	
+
 	if (!_pAuthService && !_authServiceName.empty())
 	{
-		if (!_authServiceName.empty())
+		ServiceRef::Ptr pAuthRef = _pContext->registry().findByName(_authServiceName);
+		if (pAuthRef)
 		{
-			ServiceRef::Ptr pAuthRef = _pContext->registry().findByName(_authServiceName);
-			if (pAuthRef)
-			{
-				_pAuthService = pAuthRef->castedInstance<AuthService>();
-			}
-			else
-			{
-				std::string msg("No auth service (");
-				msg += _authServiceName;
-				msg += ") is available.";
-				_pContext->logger().warning(msg);
-			}
+			_pAuthService = pAuthRef->castedInstance<AuthService>();
+		}
+		else
+		{
+			std::string msg("No auth service (");
+			msg += _authServiceName;
+			msg += ") is available.";
+			_pContext->logger().warning(msg);
 		}
 	}
 	return _pAuthService;
+}
+
+
+TokenValidator::Ptr WebServerDispatcher::tokenValidator() const
+{
+	Poco::FastMutex::ScopedLock lock(_tokenValidatorMutex);
+
+	if (!_pTokenValidator && !_tokenValidatorName.empty())
+	{
+		ServiceRef::Ptr pTokenValidatorRef = _pContext->registry().findByName(_tokenValidatorName);
+		if (pTokenValidatorRef)
+		{
+			_pTokenValidator = pTokenValidatorRef->castedInstance<TokenValidator>();
+		}
+		else
+		{
+			std::string msg("No token validator service (");
+			msg += _tokenValidatorName;
+			msg += ") is available.";
+			_pContext->logger().warning(msg);
+		}
+	}
+	return _pTokenValidator;
 }
 
 
@@ -979,7 +1135,7 @@ WebSessionManager::Ptr WebServerDispatcher::sessionManager() const
 	{
 		_pSessionManager = pWebSessionManagerRef->castedInstance<Poco::OSP::Web::WebSessionManager>();
 	}
-	
+
 	return _pSessionManager;
 }
 
@@ -994,7 +1150,7 @@ std::string WebServerDispatcher::formatMessage(const std::string& messageId, con
 	{
 		message = "Message not found: ";
 		message += realId;
-	}	
+	}
 	else
 	{
 		std::string::const_iterator it(rawMessage.begin());
@@ -1029,7 +1185,7 @@ bool WebServerDispatcher::shouldCompressMediaType(const std::string& mediaType) 
 	std::string mt(mediaType, 0, endPos);
 	if (_compressedMediaTypes.find(mt) != _compressedMediaTypes.end())
 		return true;
-		
+
 	endPos = mt.find('/');
 	if (endPos != std::string::npos)
 	{
@@ -1038,6 +1194,34 @@ bool WebServerDispatcher::shouldCompressMediaType(const std::string& mediaType) 
 		return _compressedMediaTypes.find(mt) != _compressedMediaTypes.end();
 	}
 	else return false;
+}
+
+
+void WebServerDispatcher::addCustomResponseHeaders(Poco::Net::HTTPServerResponse& response)
+{
+	for (Poco::Net::NameValueCollection::ConstIterator it = _customResponseHeaders.begin(); it != _customResponseHeaders.end(); ++it)
+	{
+		response.add(it->first, it->second);
+	}
+}
+
+
+int WebServerDispatcher::parseAuthMethods(const std::string& methods)
+{
+	int result = 0;
+	Poco::StringTokenizer tok(methods, ",;", Poco::StringTokenizer::TOK_TRIM | Poco::StringTokenizer::TOK_IGNORE_EMPTY);
+	for (Poco::StringTokenizer::Iterator it = tok.begin(); it != tok.end(); ++it)
+	{
+		if (*it == "basic")
+			result |= AUTH_BASIC;
+		else if (*it == "session")
+			result |= AUTH_SESSION;
+		else if (*it == "bearer")
+			result |= AUTH_BEARER;
+		else
+			throw Poco::InvalidArgumentException("authentication method", *it);
+	}
+	return result;
 }
 
 

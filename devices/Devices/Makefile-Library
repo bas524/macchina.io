@@ -13,6 +13,7 @@ objects = Device DeviceException \
 	DeviceServerHelper \
 	DeviceSkeleton \
 	DeviceException \
+	DeviceEventDispatcher \
 	Sensor \
 	ISensor \
 	SensorEventDispatcher \
@@ -73,6 +74,12 @@ objects = Device DeviceException \
 	MagnetometerRemoteObject \
 	MagnetometerServerHelper \
 	MagnetometerSkeleton \
+	Camera \
+	ICamera \
+	CameraEventDispatcher \
+	CameraRemoteObject \
+	CameraServerHelper \
+	CameraSkeleton \
 	IO \
 	IIO \
 	IOEventDispatcher \
@@ -84,6 +91,7 @@ objects = Device DeviceException \
 	LEDRemoteObject \
 	LEDServerHelper \
 	LEDSkeleton \
+	LEDEventDispatcher \
 	BarcodeReader \
 	IBarcodeReader \
 	BarcodeReaderEventDispatcher \

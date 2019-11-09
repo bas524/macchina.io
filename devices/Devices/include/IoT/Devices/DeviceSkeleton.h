@@ -33,6 +33,9 @@ class DeviceSkeleton: public Poco::RemotingNG::Skeleton
 	/// This class defines a generic interface for setting
 	/// and querying device properties and features.
 	///
+	/// The class also defines an event for notifications
+	/// about changes to the device status.
+	///
 	/// Every implementation of Device should expose the
 	/// following properties:
 	///   - symbolicName: A name in reverse DNS notation that identifies the
@@ -40,6 +43,7 @@ class DeviceSkeleton: public Poco::RemotingNG::Skeleton
 	///   - type (string): A name in reverse DNS notation
 	///     that identifies the generic device type (e.g., "io.macchina.serial").
 	///   - name (string): A human-readable device type (e.g., "Serial Port").
+	///   - status (int): Current device status (DeviceStatus); optional.
 	///
 	/// The following generic device types are currently defined:
 	///   - io.macchina.accelerometer (Accelerometer)
@@ -51,6 +55,8 @@ class DeviceSkeleton: public Poco::RemotingNG::Skeleton
 	///   - io.macchina.magnetometer (Magnetometer)
 	///   - io.macchina.rotary (RotaryEncoder)
 	///   - io.macchina.sensor (Sensor)
+	///   - io.macchina.boolean (BooleanSensor)
+	///   - io.macchina.counter (Counter)
 	///   - io.macchina.serial (SerialDevice)
 	///   - io.macchina.switch (Switch)
 	///   - io.macchina.trigger (Trigger)

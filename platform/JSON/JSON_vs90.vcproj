@@ -405,7 +405,7 @@
 			<File
 				RelativePath=".\src\ParserImpl.cpp"/>
 			<File
-				RelativePath=".\src\pd_json.c">
+				RelativePath=".\src\pdjson.c">
 				<FileConfiguration
 					Name="debug_shared|Win32">
 					<Tool
@@ -479,9 +479,7 @@
 			<File
 				RelativePath=".\include\Poco\JSON\ParserImpl.h"/>
 			<File
-				RelativePath=".\include\pd_json.h"/>
-			<File
-				RelativePath=".\include\pd_json_private.h"/>
+				RelativePath=".\src\pdjson.h"/>
 			<File
 				RelativePath=".\include\Poco\JSON\PrintHandler.h"/>
 			<File
@@ -493,6 +491,43 @@
 			<File
 				RelativePath=".\include\Poco\JSON\TemplateCache.h"/>
 		</Filter>
+		<File
+			RelativePath="..\DLLVersion.rc">
+			<FileConfiguration
+				Name="debug_shared|Win32">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="release_shared|Win32">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="debug_static_mt|Win32"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="release_static_mt|Win32"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="debug_static_md|Win32"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="release_static_md|Win32"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+		</File>
 	</Files>
 	<Globals/>
 </VisualStudioProject>

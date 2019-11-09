@@ -239,11 +239,13 @@ protected:
 	void handleOSName(const std::string& name, const std::string& value)
 	{
 		_osName = value;
+		makeValidFileName(_osName);
 	}
 
 	void handleOSArch(const std::string& name, const std::string& value)
 	{
 		_osArch = value;
+		makeValidFileName(_osArch);
 	}
 
 	void handleNoDeflate(const std::string& name, const std::string& value)
@@ -291,7 +293,7 @@ protected:
 		helpFormatter.setHeader(
 			"\n"
 			"The Applied Informatics OSP Bundle Creator Utility.\n"
-			"Copyright (c) 2007-2017 by Applied Informatics Software Engineering GmbH.\n"
+			"Copyright (c) 2007-2019 by Applied Informatics Software Engineering GmbH.\n"
 			"All rights reserved.\n\n"
 			"This program builds bundle files for use with the "
 			"Open Service Platform. What goes into a bundle "
@@ -406,6 +408,8 @@ private:
 		std::string activatorClass = getString(PREFIX + "activator.class", "");
 		std::string activatorLibrary = getString(PREFIX + "activator.library", "");
 		bool lazyStart = getBool(PREFIX + "lazyStart", false);
+		bool sealed = getBool(PREFIX + "sealed", false);
+		bool preventUninstall = getBool(PREFIX + "preventUninstall", false);
 		std::string runLevel = getString(PREFIX + "runLevel", BundleManifest::DEFAULT_RUNLEVEL);
 		std::string extendsBundle = getString(PREFIX + "extends", "");
 		std::string versionStr(getString(PREFIX + "version", ""));
@@ -494,7 +498,7 @@ private:
 		}
 		while (!symName.empty());
 
-		return ManifestInfo(name, symbolicName, version, vendor, copyright, activatorClass, activatorLibrary, requiredBundles, requiredModules, providedModules, lazyStart, runLevel, extendsBundle);
+		return ManifestInfo(name, symbolicName, version, vendor, copyright, activatorClass, activatorLibrary, requiredBundles, requiredModules, providedModules, lazyStart, sealed, preventUninstall, runLevel, extendsBundle);
 	}
 
 	void saveManifest(const ManifestInfo& info, std::ostream& out)
@@ -521,6 +525,10 @@ private:
 		if (!info.extendsBundle().empty())
 			out << BundleManifest::EXTENDS_BUNDLE << ": " << info.extendsBundle() << std::endl;
 		out << BundleManifest::BUNDLE_LAZYSTART << ": " << (info.lazyStart()?"true":"false") << std::endl;
+		if (info.sealed())
+			out << BundleManifest::BUNDLE_SEALED << ": true" << std::endl;
+		if (info.preventUninstall())
+			out << BundleManifest::BUNDLE_PREVENTUNINSTALL << ": true" << std::endl;
 
 		const ManifestInfo::Dependencies& deps = info.requiredBundles();
 		//Require-Bundle: com.appinf.osp.bundle1;bundle-version=[1.0,2.0), com.appinf.osp.bundle2
@@ -627,8 +635,15 @@ private:
 			{
 				File aFile(*itF);
 				if (aFile.exists())
+				{
 					copyFile(aFile, platformDir.toString());
+				}
 			}
+			if (files.empty() && incTokenizer.count() > 0)
+			{
+				std::cerr << Poco::format("Warning: Non-empty <code> element, but no files found for expression '%s'.", Poco::cat(std::string("; "), incTokenizer.begin(), incTokenizer.end())) << std::endl;
+			}
+
 			path = "code[";
 			path.append(Poco::NumberFormatter::format(idx++));
 			path.append("]");
@@ -668,6 +683,11 @@ private:
 				File aFile(*itFiles);
 				copyFile(aFile, root.toString());
 			}
+
+			if (files.empty() && incTokenizer.count() > 0)
+			{
+				std::cerr << Poco::format("Warning: Non-empty <files> element, but no files found for expression '%s'.", Poco::cat(std::string("; "), incTokenizer.begin(), incTokenizer.end())) << std::endl;
+			}
 		}
 	}
 
@@ -675,7 +695,7 @@ private:
 	{
 		for (std::string::iterator it = name.begin(); it != name.end(); ++it)
 		{
-			if (!std::isalnum(*it)) *it = '_';
+			if (!(std::isalnum(*it) || *it == '-')) *it = '_';
 		}
 	}
 

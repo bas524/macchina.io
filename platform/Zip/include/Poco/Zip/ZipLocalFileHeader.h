@@ -85,6 +85,8 @@ public:
 
 	bool isEncrypted() const;
 
+	bool hasSupportedCompressionMethod() const;
+
 	const Poco::DateTime& lastModifiedAt() const;
 
 	Poco::UInt32 getCRC() const;
@@ -367,6 +369,13 @@ inline bool ZipLocalFileHeader::isEncrypted() const
 }
 
 
+inline bool ZipLocalFileHeader::hasSupportedCompressionMethod() const
+{
+	ZipCommon::CompressionMethod method = getCompressionMethod();
+	return method == ZipCommon::CM_DEFLATE || method == ZipCommon::CM_STORE;
+}
+
+
 inline void ZipLocalFileHeader::setEncryption(bool val)
 {
 	if (val)
@@ -464,7 +473,7 @@ inline bool ZipLocalFileHeader::isFile() const
 inline bool ZipLocalFileHeader::isDirectory() const
 {
 	poco_assert_dbg(!_fileName.empty());
-	return getUncompressedSize() == 0 && getCompressionMethod() == ZipCommon::CM_STORE && _fileName[_fileName.length()-1] == '/';
+	return getUncompressedSize() == 0 && _fileName[_fileName.length()-1] == '/';
 }
 
 

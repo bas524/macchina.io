@@ -37,9 +37,12 @@ const std::string WebSessionManager::COOKIE_NAME("osp.web.session");
 const std::string WebSessionManager::SERVICE_NAME("osp.web.session");
 
 
-WebSessionManager::WebSessionManager():
+WebSessionManager::WebSessionManager(Poco::OSP::BundleContext::Ptr pContext):
+	_pContext(pContext),
 	_serial(0),
-	_cookiePersistence(COOKIE_PERSISTENT)
+	_cookiePersistence(COOKIE_PERSISTENT),
+	_cookieSecure(false),
+	_verifyAddress(true)
 {
 }
 
@@ -60,13 +63,13 @@ const std::string& WebSessionManager::getDefaultDomain() const
 	return _defaultDomain;
 }
 
-	
+
 void WebSessionManager::setDefaultPath(const std::string& path)
 {
 	_defaultPath = path;
 }
 
-	
+
 const std::string& WebSessionManager::getDefaultPath() const
 {
 	return _defaultPath;
@@ -85,6 +88,58 @@ WebSessionManager::CookiePersistence WebSessionManager::getCookiePersistence() c
 }
 
 
+void WebSessionManager::setCookieSecure(bool secure)
+{
+	_cookieSecure = secure;
+}
+
+
+bool WebSessionManager::isCookieSecure() const
+{
+	return _cookieSecure;
+}
+
+
+void WebSessionManager::setVerifyAddress(bool verify)
+{
+	_verifyAddress = verify;
+}
+
+
+bool WebSessionManager::isAddressVerified() const
+{
+	return _verifyAddress;
+}
+
+
+void WebSessionManager::setCSRFCookie(const std::string& name)
+{
+	_csrfCookie = name;
+}
+
+
+const std::string& WebSessionManager::getCSRFCookie() const
+{
+	return _csrfCookie;
+}
+
+
+void WebSessionManager::setSessionStore(WebSessionStore::Ptr pWebSessionStore)
+{
+	FastMutex::ScopedLock lock(_mutex);
+
+	_pStore = pWebSessionStore;
+}
+
+
+WebSessionStore::Ptr WebSessionManager::getSessionStore() const
+{
+	FastMutex::ScopedLock lock(_mutex);
+
+	return _pStore;
+}
+
+
 const std::type_info& WebSessionManager::type() const
 {
 	return typeid(WebSessionManager);
@@ -98,35 +153,31 @@ bool WebSessionManager::isA(const std::type_info& otherType) const
 }
 
 
+WebSession::Ptr WebSessionManager::findById(const std::string& sessionId)
+{
+	FastMutex::ScopedLock lock(_mutex);
+
+	return findByIdImpl(sessionId, _pContext);
+}
+
+
 WebSession::Ptr WebSessionManager::find(const std::string& appName, const Poco::Net::HTTPServerRequest& request)
 {
 	FastMutex::ScopedLock lock(_mutex);
-	
-	WebSession::Ptr pSession(_cache.get(getId(appName, request)));
-	if (pSession)
-	{
-		if (pSession->clientAddress() == request.clientAddress().host())
-		{
-			pSession->access();
-			_cache.add(pSession->id(), pSession);
-			addCookie(appName, request, pSession);
-		}
-		else 
-		{
-			// possible attack: same session ID from different host - invalidate session
-			_cache.remove(pSession->id());
-			return 0;
-		}
-	}
-	return pSession;
+
+	return findImpl(appName, request, _pContext);
 }
 
 
 WebSession::Ptr WebSessionManager::get(const std::string& appName, const Poco::Net::HTTPServerRequest& request, int expireSeconds, BundleContext::Ptr pContext)
 {
-	WebSession::Ptr pSession = find(appName, request);
+	FastMutex::ScopedLock lock(_mutex);
+
+	WebSession::Ptr pSession = findImpl(appName, request, pContext);
 	if (!pSession)
-		pSession = create(appName, request, expireSeconds, pContext);
+	{
+		pSession = createImpl(appName, request, expireSeconds, pContext);
+	}
 	return pSession;
 }
 
@@ -134,18 +185,91 @@ WebSession::Ptr WebSessionManager::get(const std::string& appName, const Poco::N
 WebSession::Ptr WebSessionManager::create(const std::string& appName, const Poco::Net::HTTPServerRequest& request, int expireSeconds, BundleContext::Ptr pContext)
 {
 	FastMutex::ScopedLock lock(_mutex);
-	WebSession::Ptr pSession(new WebSession(createSessionId(request), expireSeconds, request.clientAddress().host(), pContext));
-	_cache.add(pSession->id(), pSession);
-	addCookie(appName, request, pSession);
-	pSession->setValue(WebSession::CSRF_TOKEN, createSessionId(request));
-	return pSession;
+
+	return createImpl(appName, request, expireSeconds, pContext);
 }
 
 
 void WebSessionManager::remove(WebSession::Ptr pSession)
 {
 	FastMutex::ScopedLock lock(_mutex);
+
+	removeImpl(pSession);
+}
+
+
+WebSession::Ptr WebSessionManager::findImpl(const std::string& appName, const Poco::Net::HTTPServerRequest& request, BundleContext::Ptr pContext)
+{
+	WebSession::Ptr pSession;
+	std::string sessionId(getId(appName, request));
+	if (!sessionId.empty())
+	{
+		pSession = findByIdImpl(sessionId, pContext);
+	}
+	if (pSession)
+	{
+		if (!_verifyAddress || pSession->clientAddress() == request.clientAddress().host())
+		{
+			pSession->access();
+			_cache.add(pSession->id(), pSession);
+			addSessionCookie(appName, request, pSession);
+			addCSRFCookie(appName, request, pSession);
+		}
+		else
+		{
+			// possible attack: same session ID from different host - invalidate session
+			removeImpl(pSession);
+			return 0;
+		}
+	}
+	return pSession;
+}
+
+
+WebSession::Ptr WebSessionManager::findByIdImpl(const std::string& sessionId, BundleContext::Ptr pContext)
+{
+	WebSession::Ptr pSession = _cache.get(sessionId);
+	if (_pStore)
+	{
+		if (pSession)
+		{
+			std::pair<WebSession::Ptr, bool> result = _pStore->loadSession(pContext, sessionId, pSession->version());
+			if (result.first && result.second)
+				pSession = result.first;
+			else if (!result.second)
+				pSession.reset();
+		}
+		else
+		{
+			std::pair<WebSession::Ptr, bool> result = _pStore->loadSession(pContext, sessionId);
+			if (result.second) pSession = result.first;
+		}
+	}
+	return pSession;
+}
+
+
+WebSession::Ptr WebSessionManager::createImpl(const std::string& appName, const Poco::Net::HTTPServerRequest& request, int expireSeconds, BundleContext::Ptr pContext)
+{
+	WebSession::Ptr pSession(new WebSession(createToken(request), createToken(request), 1, expireSeconds, request.clientAddress().host(), _pStore, pContext));
+	_cache.add(pSession->id(), pSession);
+	addSessionCookie(appName, request, pSession);
+	addCSRFCookie(appName, request, pSession);
+	if (_pStore)
+	{
+		_pStore->saveSession(pSession);
+	}
+	return pSession;
+}
+
+
+void WebSessionManager::removeImpl(WebSession::Ptr pSession)
+{
 	_cache.remove(pSession->id());
+	if (_pStore)
+	{
+		_pStore->expireSession(pSession->id(), 0);
+	}
 }
 
 
@@ -157,13 +281,14 @@ std::string WebSessionManager::getId(const std::string& appName, const Poco::Net
 	request.getCookies(cookies);
 	NameValueCollection::ConstIterator it = cookies.find(name);
 	if (it != cookies.end())
+	{
 		id = it->second;
-	
+	}
 	return id;
 }
 
 
-void WebSessionManager::addCookie(const std::string& appName, const Poco::Net::HTTPServerRequest& request, WebSession::Ptr pSession)
+void WebSessionManager::addSessionCookie(const std::string& appName, const Poco::Net::HTTPServerRequest& request, WebSession::Ptr pSession)
 {
 	Poco::Net::HTTPCookie cookie(cookieName(appName), pSession->id());
 	if (_cookiePersistence == COOKIE_PERSISTENT)
@@ -173,14 +298,31 @@ void WebSessionManager::addCookie(const std::string& appName, const Poco::Net::H
 	cookie.setPath(cookiePath(appName));
 	cookie.setDomain(cookieDomain(appName));
 	cookie.setHttpOnly();
+	cookie.setSecure(_cookieSecure);
 	request.response().addCookie(cookie);
 }
 
 
-std::string WebSessionManager::createSessionId(const Poco::Net::HTTPServerRequest& request)
+void WebSessionManager::addCSRFCookie(const std::string& appName, const Poco::Net::HTTPServerRequest& request, WebSession::Ptr pSession)
+{
+	if (!_csrfCookie.empty())
+	{
+		Poco::Net::HTTPCookie csrfCookie(_csrfCookie, pSession->csrfToken());
+		if (_cookiePersistence == COOKIE_PERSISTENT)
+		{
+			csrfCookie.setMaxAge(pSession->timeout());
+		}
+		csrfCookie.setPath(cookiePath(appName));
+		csrfCookie.setSecure(_cookieSecure);
+		request.response().addCookie(csrfCookie);
+	}
+}
+
+
+std::string WebSessionManager::createToken(const Poco::Net::HTTPServerRequest& request)
 {
 	++_serial;
-	
+
 	Poco::SHA1Engine sha1;
 	sha1.update(&_serial, sizeof(_serial));
 	Poco::Timestamp::TimeVal tv = Poco::Timestamp().epochMicroseconds();
@@ -192,7 +334,7 @@ std::string WebSessionManager::createSessionId(const Poco::Net::HTTPServerReques
 		sha1.update(c);
 	}
 	sha1.update(request.clientAddress().toString());
-	
+
 	std::string result = Poco::DigestEngine::digestToHex(sha1.digest());
 	return result;
 }

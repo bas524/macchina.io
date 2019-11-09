@@ -20,6 +20,7 @@
 
 #include "Poco/RemotingNG/RemotingNG.h"
 #include "Poco/RemotingNG/Serializer.h"
+#include "Poco/Array.h"
 #include "Poco/Optional.h"
 #include "Poco/Nullable.h"
 #include "Poco/SharedPtr.h"
@@ -34,6 +35,9 @@
 #include <vector>
 #include <list>
 #include <set>
+#ifdef POCO_REMOTING_HAVE_STD_ARRAY
+#include <array>
+#endif
 
 
 namespace Poco {
@@ -58,11 +62,11 @@ public:
 	{
 		ser.serialize(name, value);
 	}
-	
+
 private:
 	TypeSerializer();
 	~TypeSerializer();
-	
+
 	TypeSerializer(const TypeSerializer&);
 	TypeSerializer& operator = (const TypeSerializer&);
 };
@@ -89,6 +93,58 @@ public:
 		}
 	}
 };
+
+
+template <typename T, std::size_t N>
+class TypeSerializer<Poco::Array<T, N> >
+{
+public:
+	static void serialize(const std::string& name, const Poco::Array<T, N>& value, Serializer& ser)
+	{
+		ser.serializeSequenceBegin(name, static_cast<Poco::UInt32>(value.size()));
+		serializeImpl(name, value, ser);
+		ser.serializeSequenceEnd(name);
+	}
+
+	static void serializeImpl(const std::string& name, const Poco::Array<T, N>& value, Serializer& ser)
+	{
+		typename Poco::Array<T, N>::const_iterator it = value.begin();
+		typename Poco::Array<T, N>::const_iterator itEnd = value.end();
+		for (; it != itEnd; ++it)
+		{
+			TypeSerializer<T>::serialize(name, *it, ser);
+		}
+	}
+};
+
+
+#ifdef POCO_REMOTING_HAVE_STD_ARRAY
+
+
+template <typename T, std::size_t N>
+class TypeSerializer<std::array<T, N> >
+{
+public:
+	static void serialize(const std::string& name, const std::array<T, N>& value, Serializer& ser)
+	{
+		ser.serializeSequenceBegin(name, static_cast<Poco::UInt32>(value.size()));
+		serializeImpl(name, value, ser);
+		ser.serializeSequenceEnd(name);
+	}
+
+	static void serializeImpl(const std::string& name, const std::array<T, N>& value, Serializer& ser)
+	{
+		typename std::array<T, N>::const_iterator it = value.begin();
+		typename std::array<T, N>::const_iterator itEnd = value.end();
+		for (; it != itEnd; ++it)
+		{
+			TypeSerializer<T>::serialize(name, *it, ser);
+		}
+	}
+};
+
+
+#endif // POCO_REMOTING_HAVE_STD_ARRAY
 
 
 template <typename T>
@@ -214,7 +270,7 @@ public:
 
 
 template <typename T>
-class TypeSerializer<Poco::SharedPtr<T> > 
+class TypeSerializer<Poco::SharedPtr<T> >
 {
 public:
 	static void serialize(const std::string& name, Poco::SharedPtr<T> value, Serializer& ser)

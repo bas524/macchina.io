@@ -82,8 +82,6 @@ XDKSensor::XDKSensor(BtLE::Peripheral::Ptr pPeripheral, const Params& params, Po
 	addProperty("physicalQuantity", &XDKSensor::getPhysicalQuantity);
 	addProperty("physicalUnit", &XDKSensor::getPhysicalUnit);
 
-	_pEventPolicy = new IoT::Devices::NoModerationPolicy<double>(valueChanged);
-
 	_pPeripheral->services();
 	_dataChar = _pPeripheral->characteristic(_params.serviceUUID, _params.dataUUID);
 
@@ -215,7 +213,7 @@ void XDKSensor::setValueChangedDelta(const std::string&, const Poco::Any& value)
 
 Poco::Any XDKSensor::getDisplayValue(const std::string&) const
 {
-	if (_ready)
+	if (ready())
 		return Poco::NumberFormatter::format(value(), 0, 1);
 	else
 		return std::string("n/a");

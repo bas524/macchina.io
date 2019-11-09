@@ -451,7 +451,7 @@
 			<File
 				RelativePath=".\src\ParserImpl.cpp"/>
 			<File
-				RelativePath=".\src\pd_json.c">
+				RelativePath=".\src\pdjson.c">
 				<FileConfiguration
 					Name="debug_shared|Digi JumpStart (ARMV4I)">
 					<Tool
@@ -525,9 +525,7 @@
 			<File
 				RelativePath=".\include\Poco\JSON\ParserImpl.h"/>
 			<File
-				RelativePath=".\include\pd_json.h"/>
-			<File
-				RelativePath=".\include\pd_json_private.h"/>
+				RelativePath=".\src\pdjson.h"/>
 			<File
 				RelativePath=".\include\Poco\JSON\PrintHandler.h"/>
 			<File
@@ -539,6 +537,43 @@
 			<File
 				RelativePath=".\include\Poco\JSON\TemplateCache.h"/>
 		</Filter>
+		<File
+			RelativePath="..\DLLVersion.rc">
+			<FileConfiguration
+				Name="debug_shared|Digi JumpStart (ARMV4I)">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="release_shared|Digi JumpStart (ARMV4I)">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="debug_static_mt|Digi JumpStart (ARMV4I)"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="release_static_mt|Digi JumpStart (ARMV4I)"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="debug_static_md|Digi JumpStart (ARMV4I)"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="release_static_md|Digi JumpStart (ARMV4I)"
+				ExcludedFromBuild="true">
+				<Tool
+					Name="VCResourceCompilerTool"/>
+			</FileConfiguration>
+		</File>
 	</Files>
 	<Globals/>
 </VisualStudioProject>

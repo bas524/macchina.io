@@ -80,8 +80,6 @@ SensorTagSensor::SensorTagSensor(BtLE::Peripheral::Ptr pPeripheral, const Params
 	addProperty("physicalQuantity", &SensorTagSensor::getPhysicalQuantity);
 	addProperty("physicalUnit", &SensorTagSensor::getPhysicalUnit);
 
-	_pEventPolicy = new IoT::Devices::NoModerationPolicy<double>(valueChanged);
-
 	_pPeripheral->services();
 	_controlChar = _pPeripheral->characteristic(_params.serviceUUID, _params.controlUUID);
 	_dataChar = _pPeripheral->characteristic(_params.serviceUUID, _params.dataUUID);
@@ -216,7 +214,7 @@ void SensorTagSensor::setValueChangedDelta(const std::string&, const Poco::Any& 
 
 Poco::Any SensorTagSensor::getDisplayValue(const std::string&) const
 {
-	if (_ready)
+	if (ready())
 		return Poco::NumberFormatter::format(value(), 0, 1);
 	else
 		return std::string("n/a");

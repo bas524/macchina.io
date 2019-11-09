@@ -2,17 +2,20 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Web">
-      <UniqueIdentifier>{7179f1db-4454-432c-a936-4e2c7bda431e}</UniqueIdentifier>
+      <UniqueIdentifier>{07198455-37bf-41c1-9d80-c75f224840fe}</UniqueIdentifier>
     </Filter>
     <Filter Include="Web\Header Files">
-      <UniqueIdentifier>{f8dcd346-e114-4600-bdea-365d33ab7270}</UniqueIdentifier>
+      <UniqueIdentifier>{cc5ca323-77a2-4710-b06a-b09941551f54}</UniqueIdentifier>
     </Filter>
     <Filter Include="Web\Source Files">
-      <UniqueIdentifier>{257bbeef-a85e-4748-b9da-74541ab73b77}</UniqueIdentifier>
+      <UniqueIdentifier>{145f732e-14a2-4636-a497-7a96c4815b9b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Poco\OSP\Web\MediaTypeMapper.h">
+      <Filter>Web\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Poco\OSP\Web\TokenValidator.h">
       <Filter>Web\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\poco\osp\web\Web.h">
@@ -54,9 +57,15 @@
     <ClInclude Include="include\poco\osp\web\WebSessionService.h">
       <Filter>Web\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\Poco\OSP\Web\WebSessionStore.h">
+      <Filter>Web\Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\MediaTypeMapper.cpp">
+      <Filter>Web\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\TokenValidator.cpp">
       <Filter>Web\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\WebFilter.cpp">
@@ -90,6 +99,9 @@
       <Filter>Web\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\WebSessionManager.cpp">
+      <Filter>Web\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\WebSessionStore.cpp">
       <Filter>Web\Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -16,6 +16,7 @@
 #include "Poco/OSP/BundleLoader.h"
 #include "Poco/OSP/OSPException.h"
 #include "Poco/Util/PropertyFileConfiguration.h"
+#include "Poco/Format.h"
 #include "Poco/Path.h"
 #include <memory>
 
@@ -241,6 +242,7 @@ void Bundle::stop()
 void Bundle::uninstall()
 {
 	if (_state != BUNDLE_INSTALLED && _state != BUNDLE_RESOLVED) throw BundleStateException("uninstall() requires INSTALLED or RESOLVED state");
+	if (_pManifest->preventUninstall()) throw BundleUninstallException("bundle manifest prevents uninstall");
 
 	BundleEvent uninstallingEvent(this, BundleEvent::EV_BUNDLE_UNINSTALLING);
 	events().bundleUninstalling(this, uninstallingEvent);
@@ -321,16 +323,20 @@ void Bundle::setActivator(BundleActivator* pActivator)
 
 void Bundle::addExtensionBundle(Bundle* pExtensionBundle)
 {
-	if (isResolved())
+	if (!_pManifest->sealed())
 	{
+		if (isResolved())
 		{
-			Poco::FastMutex::ScopedLock lock(_extensionBundlesMutex);
+			{
+				Poco::FastMutex::ScopedLock lock(_extensionBundlesMutex);
 
-			_extensionBundles.insert(Bundle::Ptr(pExtensionBundle, true));
+				_extensionBundles.insert(Bundle::Ptr(pExtensionBundle, true));
+			}
+			_pProperties->addProperties(pExtensionBundle->_pProperties, -static_cast<int>(_extensionBundles.size()), true);
 		}
-		_pProperties->addProperties(pExtensionBundle->_pProperties, -static_cast<int>(_extensionBundles.size()), true);
+		else throw BundleStateException("addExtensionBundle() requires at least RESOLVED state");
 	}
-	else throw BundleStateException("addExtensionBundle() requires at least RESOLVED state");
+	else throw BundleSealedException(Poco::format("%s cannot extend %s", pExtensionBundle->symbolicName(), symbolicName()));
 }
 
 

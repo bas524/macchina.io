@@ -179,6 +179,8 @@
 				<File
 					RelativePath=".\include\Poco\OSP\Web\MediaTypeMapper.h"/>
 				<File
+					RelativePath=".\include\Poco\OSP\Web\TokenValidator.h"/>
+				<File
 					RelativePath=".\include\poco\osp\web\Web.h"/>
 				<File
 					RelativePath=".\include\Poco\OSP\Web\WebFilter.h"/>
@@ -204,11 +206,15 @@
 					RelativePath=".\include\poco\osp\web\WebSessionManager.h"/>
 				<File
 					RelativePath=".\include\poco\osp\web\WebSessionService.h"/>
+				<File
+					RelativePath=".\include\Poco\OSP\Web\WebSessionStore.h"/>
 			</Filter>
 			<Filter
 				Name="Source Files">
 				<File
 					RelativePath=".\src\MediaTypeMapper.cpp"/>
+				<File
+					RelativePath=".\src\TokenValidator.cpp"/>
 				<File
 					RelativePath=".\src\WebFilter.cpp"/>
 				<File
@@ -231,6 +237,8 @@
 					RelativePath=".\src\WebSession.cpp"/>
 				<File
 					RelativePath=".\src\WebSessionManager.cpp"/>
+				<File
+					RelativePath=".\src\WebSessionStore.cpp"/>
 			</Filter>
 		</Filter>
 	</Files>

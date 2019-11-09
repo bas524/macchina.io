@@ -5,22 +5,15 @@
 #
 
 include $(POCO_BASE)/build/rules/global
+include $(POCO_BASE)/OSP/BundleCreator/BundleCreator.make
 
-ifneq (,$(findstring debug,$(DEFAULT_TARGET)))
-	BUNDLE_TOOL = $(POCO_BASE)/OSP/BundleCreator/$(POCO_HOST_BINDIR)/bundled
-else
-	BUNDLE_TOOL = $(POCO_BASE)/OSP/BundleCreator/$(POCO_HOST_BINDIR)/bundle
-endif
+objects = SensorTag SensorTagAccelerometer BundleActivator
 
-INCLUDE += -I$(PROJECT_BASE)/devices/Devices/include
-INCLUDE += -I$(PROJECT_BASE)/protocols/BtLE/include
+target          = io.macchina.sensortag
+target_includes = $(PROJECT_BASE)/devices/Devices/include \
+                  $(PROJECT_BASE)/protocols/BtLE/include
+target_libs     = IoTBtLE IoTDevices PocoRemotingNG PocoOSP PocoUtil PocoXML PocoFoundation
 
-objects = SensorTag SensorTagAccelerometer BundleActivator 
-
-target         = io.macchina.btle.sensortag
-target_version = 1
-target_libs    = IoTBtLE IoTDevices PocoRemotingNG PocoOSP PocoUtil PocoXML PocoFoundation
-
-postbuild      = $(SET_LD_LIBRARY_PATH) $(BUNDLE_TOOL) -n$(OSNAME) -a$(OSARCH) -o../bundles SensorTag.bndlspec
+postbuild = $(SET_LD_LIBRARY_PATH) $(BUNDLE_TOOL) -n$(OSNAME) -a$(OSARCH) -o../bundles SensorTag.bndlspec
 
 include $(POCO_BASE)/build/rules/dylib
